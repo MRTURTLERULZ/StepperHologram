@@ -31,11 +31,32 @@ const LIMITS = {
 
 const PAN_LIMIT = 2;
 const UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+const MODEL_UPLOAD_MAX_BYTES = 32 * 1024 * 1024;
 const ALLOWED_MIME = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
   "image/webp": ".webp",
 };
+
+const MODEL_MIME_TO_EXT = {
+  "model/gltf-binary": ".glb",
+  "model/gltf+json": ".gltf",
+  "model/stl": ".stl",
+  "application/sla": ".stl",
+  "application/vnd.ms-pki.stl": ".stl",
+};
+
+function modelExtFromUpload(file) {
+  const fromMime = MODEL_MIME_TO_EXT[file.mimetype];
+  if (fromMime) return fromMime;
+  const ext = path.extname(file.originalname || "").toLowerCase();
+  if (ext === ".glb" || ext === ".gltf" || ext === ".stl") return ext;
+  return null;
+}
+
+function isAllowedModelUpload(file) {
+  return modelExtFromUpload(file) !== null;
+}
 
 let activeRun = null;
 let lastResult = null;
@@ -45,6 +66,7 @@ let displayState = {
   panX: 0,
   panY: 0,
   imageUrl: "",
+  modelUrl: "",
   motorVisual: {
     running: false,
     speed: 0,
@@ -56,6 +78,7 @@ let displayState = {
 };
 
 let imageVersion = 0;
+let modelVersion = 0;
 
 /** @type {import("ws").WebSocket[]} */
 const wsClients = [];
@@ -71,6 +94,7 @@ function buildStateMessage() {
     panX: displayState.panX,
     panY: displayState.panY,
     imageUrl: displayState.imageUrl,
+    modelUrl: displayState.modelUrl,
     motorVisual: { ...displayState.motorVisual },
   };
 }
@@ -177,6 +201,28 @@ const upload = multer({
   },
 });
 
+const modelStorage = multer.diskStorage({
+  destination(_req, _file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename(_req, file, cb) {
+    const ext = modelExtFromUpload(file) || ".glb";
+    cb(null, `display-model${ext}`);
+  },
+});
+
+const uploadModel = multer({
+  storage: modelStorage,
+  limits: { fileSize: MODEL_UPLOAD_MAX_BYTES },
+  fileFilter(_req, file, cb) {
+    if (isAllowedModelUpload(file)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only GLB, GLTF, and STL models are allowed (export from CAD as GLB or STL)"));
+    }
+  },
+});
+
 app.use(express.json());
 
 app.get("/api/display/state", (_req, res) => {
@@ -184,6 +230,7 @@ app.get("/api/display/state", (_req, res) => {
     panX: displayState.panX,
     panY: displayState.panY,
     imageUrl: displayState.imageUrl,
+    modelUrl: displayState.modelUrl,
     motorVisual: displayState.motorVisual,
   });
 });
@@ -214,8 +261,27 @@ app.post("/api/display/upload", (req, res) => {
     imageVersion += 1;
     const publicPath = `/uploads/${req.file.filename}?v=${imageVersion}`;
     displayState.imageUrl = publicPath;
+    displayState.modelUrl = "";
     broadcastState();
     return res.json({ ok: true, imageUrl: publicPath });
+  });
+});
+
+app.post("/api/display/upload-model", (req, res) => {
+  uploadModel.single("model")(req, res, (err) => {
+    if (err) {
+      const message = err.message || "Upload failed";
+      return res.status(400).json({ error: message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "No file field 'model'" });
+    }
+    modelVersion += 1;
+    const publicPath = `/uploads/${req.file.filename}?v=${modelVersion}`;
+    displayState.modelUrl = publicPath;
+    displayState.imageUrl = "";
+    broadcastState();
+    return res.json({ ok: true, modelUrl: publicPath });
   });
 });
 

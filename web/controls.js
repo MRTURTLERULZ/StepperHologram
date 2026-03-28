@@ -10,6 +10,7 @@ const microstepsInput = document.getElementById("microsteps");
 
 const displayUrlEl = document.getElementById("displayUrl");
 const copyDisplayUrlBtn = document.getElementById("copyDisplayUrl");
+const modelFileInput = document.getElementById("modelFile");
 const imageFileInput = document.getElementById("imageFile");
 const uploadStatusEl = document.getElementById("uploadStatus");
 
@@ -80,10 +81,30 @@ document.getElementById("panReset").addEventListener("click", async () => {
   }
 });
 
+modelFileInput.addEventListener("change", async () => {
+  const file = modelFileInput.files && modelFileInput.files[0];
+  if (!file) return;
+  uploadStatusEl.textContent = "Uploading 3D model…";
+  const fd = new FormData();
+  fd.append("model", file);
+  try {
+    const res = await fetch("/api/display/upload-model", {
+      method: "POST",
+      body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Model upload failed: ${res.status}`);
+    uploadStatusEl.textContent = `Model uploaded. Display: ${data.modelUrl}`;
+    modelFileInput.value = "";
+  } catch (e) {
+    uploadStatusEl.textContent = e.message;
+  }
+});
+
 imageFileInput.addEventListener("change", async () => {
   const file = imageFileInput.files && imageFileInput.files[0];
   if (!file) return;
-  uploadStatusEl.textContent = "Uploading…";
+  uploadStatusEl.textContent = "Uploading image…";
   const fd = new FormData();
   fd.append("image", file);
   try {
@@ -93,7 +114,7 @@ imageFileInput.addEventListener("change", async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
-    uploadStatusEl.textContent = `Uploaded. Display will use: ${data.imageUrl}`;
+    uploadStatusEl.textContent = `Image uploaded. Display will use: ${data.imageUrl} (3D model cleared)`;
     imageFileInput.value = "";
   } catch (e) {
     uploadStatusEl.textContent = e.message;
