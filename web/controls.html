@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stepper Holo — Controls</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0f14;
+        --panel: #101820;
+        --line: #243545;
+        --text: #e2ecf5;
+        --accent: #3cc0ff;
+        --danger: #ff6b6b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Segoe UI, Tahoma, sans-serif;
+        background: radial-gradient(circle at 15% 15%, #102030, var(--bg) 55%);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .wrap {
+        max-width: 520px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.35rem;
+      }
+      .hint {
+        margin: 0 0 18px;
+        font-size: 0.9rem;
+        opacity: 0.85;
+        line-height: 1.4;
+      }
+      .display-url {
+        margin-bottom: 18px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0d141b;
+        font-size: 0.9rem;
+        word-break: break-all;
+      }
+      .display-url button {
+        margin-top: 8px;
+      }
+      section {
+        margin-bottom: 22px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .group {
+        margin-bottom: 12px;
+      }
+      label {
+        display: block;
+        font-size: 0.9rem;
+        margin-bottom: 4px;
+      }
+      input[type="number"],
+      input[type="file"] {
+        width: 100%;
+        padding: 8px 10px;
+        background: #0d141b;
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      input[type="file"] {
+        padding: 8px;
+      }
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      button {
+        padding: 10px 14px;
+        border: none;
+        border-radius: 8px;
+        background: #2d3f4f;
+        color: var(--text);
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        color: #001420;
+        font-weight: 600;
+      }
+      button.danger {
+        background: var(--danger);
+        color: #290404;
+        font-weight: 600;
+      }
+      .pad {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        max-width: 220px;
+        margin-bottom: 10px;
+      }
+      .pad .spacer {
+        grid-column: 2;
+      }
+      #status {
+        margin-top: 16px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0d141b;
+        white-space: pre-wrap;
+        font-size: 0.85rem;
+      }
+      #uploadStatus {
+        margin-top: 8px;
+        font-size: 0.85rem;
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Stepper Holo — Controls</h1>
+      <p class="hint">
+        Open the display URL on your iPhone (same Wi‑Fi as this Pi). This page drives the motor and the on-screen image.
+      </p>
+
+      <div class="display-url">
+        <strong>Display URL</strong>
+        <div id="displayUrl"></div>
+        <button type="button" id="copyDisplayUrl">Copy URL</button>
+      </div>
+
+      <section>
+        <h2>Display image</h2>
+        <div class="group">
+          <label for="imageFile">Upload sample image (PNG, JPEG, WebP)</label>
+          <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" />
+        </div>
+        <div id="uploadStatus"></div>
+      </section>
+
+      <section>
+        <h2>Pan (display)</h2>
+        <div class="pad">
+          <span></span>
+          <button type="button" id="panUp" title="Pan up">Up</button>
+          <span></span>
+          <button type="button" id="panLeft">Left</button>
+          <span class="spacer"></span>
+          <button type="button" id="panRight">Right</button>
+          <span></span>
+          <button type="button" id="panDown">Down</button>
+          <span></span>
+        </div>
+        <button type="button" id="panReset">Reset pan</button>
+      </section>
+
+      <section>
+        <h2>Stepper motor</h2>
+        <div class="group">
+          <label for="speed">Speed (rev/s, negative = reverse)</label>
+          <input id="speed" type="number" step="0.1" value="1.0" />
+        </div>
+        <div class="group">
+          <label for="duration">Duration (seconds)</label>
+          <input id="duration" type="number" step="0.1" value="3.0" />
+        </div>
+        <div class="group">
+          <label for="ramp">Ramp (seconds)</label>
+          <input id="ramp" type="number" step="0.1" value="0.5" />
+        </div>
+        <div class="group">
+          <label for="microsteps">Microsteps</label>
+          <input id="microsteps" type="number" step="1" value="16" />
+        </div>
+
+        <div class="buttons">
+          <button id="runBtn" class="primary" type="button">Run</button>
+          <button id="stopBtn" class="danger" type="button">Stop</button>
+          <button id="refreshBtn" type="button">Refresh status</button>
+        </div>
+
+        <div id="status">Loading status...</div>
+      </section>
+    </div>
+
+    <script type="module" src="./controls.js"></script>
+  </body>
+</html>

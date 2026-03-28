@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Stepper Holo — Display</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #05080c;
+        touch-action: none;
+      }
+      #three-container {
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="three-container"></div>
+    <script type="module" src="./display.js"></script>
+  </body>
+</html>
