@@ -5,6 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
+    "dev": "nodemon --watch server --watch package.json server/index.js",
     "build:stepper": "gcc stepper.c -o stepper -lwiringPi -lm"
   },
   "keywords": [],
@@ -15,5 +16,8 @@
     "express": "^5.2.1",
     "multer": "^2.1.1",
     "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
   }
 }

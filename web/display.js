@@ -5,6 +5,23 @@ import { STLLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/j
 const urlParams = new URLSearchParams(window.location.search);
 const isEmbedPreview = urlParams.get("embed") === "1";
 
+/**
+ * Turn API paths like /uploads/foo.stl or uploads/foo.stl into a full URL from the site origin.
+ * Relative paths without a leading slash would otherwise resolve under /display/... and 404.
+ */
+function resolveSiteUrl(u) {
+  if (u == null) return "";
+  const t = String(u).trim();
+  if (!t) return "";
+  try {
+    if (/^https?:\/\//i.test(t)) return new URL(t).href;
+    const path = t.startsWith("/") ? t : `/${t.replace(/^\/+/, "")}`;
+    return new URL(path, window.location.origin).href;
+  } catch {
+    return "";
+  }
+}
+
 const container = document.getElementById("three-container");
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -15,7 +32,7 @@ renderer.toneMapping = THREE.NoToneMapping;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05080c);
+scene.background = new THREE.Color(0x0c1520);
 
 const camera = new THREE.PerspectiveCamera(
   50,
@@ -141,7 +158,9 @@ function wrapFittedModel(object3D) {
     const size = new THREE.Vector3();
     box.getSize(size);
     const maxDim = Math.max(size.x, size.y, size.z, 1e-6);
-    wrap.scale.setScalar(TARGET_MODEL_SIZE / maxDim);
+    if (Number.isFinite(maxDim) && maxDim > 1e-9) {
+      wrap.scale.setScalar(TARGET_MODEL_SIZE / maxDim);
+    }
   }
   return wrap;
 }
@@ -197,10 +216,11 @@ function applyTextureToMesh(texture, url) {
 }
 
 function loadImageFromUrl(url) {
-  if (!url || url === loadedImageUrl) return;
+  const absUrl = resolveSiteUrl(url);
+  if (!absUrl || absUrl === loadedImageUrl) return;
   texLoader.load(
-    url,
-    (tex) => applyTextureToMesh(tex, url),
+    absUrl,
+    (tex) => applyTextureToMesh(tex, absUrl),
     undefined,
     () => {
       loadedImageUrl = "";
@@ -219,10 +239,15 @@ function setFallbackImagePlane() {
 }
 
 function loadModelFromUrl(url) {
-  if (!url || url === loadedModelUrl) return;
+  const absUrl = resolveSiteUrl(url);
+  if (!absUrl || absUrl === loadedModelUrl) return;
 
-  const pathOnly = url.split("?")[0];
-  const lower = pathOnly.toLowerCase();
+  let pathname = "";
+  try {
+    pathname = new URL(absUrl).pathname.toLowerCase();
+  } catch {
+    pathname = absUrl.split("?")[0].toLowerCase();
+  }
 
   const onFail = () => {
     loadedModelUrl = "";
@@ -230,14 +255,19 @@ function loadModelFromUrl(url) {
     setFallbackImagePlane();
   };
 
-  if (lower.endsWith(".stl")) {
-    fetch(url)
+  if (pathname.endsWith(".stl")) {
+    fetch(absUrl, { cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.arrayBuffer();
       })
       .then((buffer) => {
-        const geometry = stlLoader.parse(buffer);
+        let geometry;
+        try {
+          geometry = stlLoader.parse(buffer);
+        } catch {
+          throw new Error("STL parse failed");
+        }
         const pos = geometry.getAttribute("position");
         if (!pos || pos.count === 0) {
           throw new Error("STL has no vertices");
@@ -255,7 +285,7 @@ function loadModelFromUrl(url) {
         const mesh = new THREE.Mesh(geometry, mat);
         const fitted = wrapFittedModel(mesh);
         useModel = true;
-        loadedModelUrl = url;
+        loadedModelUrl = absUrl;
         loadedImageUrl = "";
         disposeCurrentTexture();
         clearContentHolder();
@@ -267,9 +297,9 @@ function loadModelFromUrl(url) {
     return;
   }
 
-  if (lower.endsWith(".glb") || lower.endsWith(".gltf")) {
+  if (pathname.endsWith(".glb") || pathname.endsWith(".gltf")) {
     gltfLoader.load(
-      url,
+      absUrl,
       (gltf) => {
         const root = gltf.scene;
         root.traverse((child) => {
@@ -287,7 +317,7 @@ function loadModelFromUrl(url) {
         });
         const fitted = wrapFittedModel(root);
         useModel = true;
-        loadedModelUrl = url;
+        loadedModelUrl = absUrl;
         loadedImageUrl = "";
         disposeCurrentTexture();
         clearContentHolder();
@@ -368,8 +398,13 @@ function connectWebSocket() {
   });
 }
 
-fetch("/api/display/state")
-  .then((r) => r.json())
+setFallbackImagePlane();
+
+fetch("/api/display/state", { cache: "no-store" })
+  .then((r) => {
+    if (!r.ok) throw new Error(`state ${r.status}`);
+    return r.json();
+  })
   .then((s) => applyDisplayState(s))
   .catch(() => {
     setFallbackImagePlane();
