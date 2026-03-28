@@ -206,15 +206,24 @@ function loadModelFromUrl(url) {
   };
 
   if (lower.endsWith(".stl")) {
-    stlLoader.load(
-      url,
-      (geometry) => {
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.arrayBuffer();
+      })
+      .then((buffer) => {
+        const geometry = stlLoader.parse(buffer);
+        const pos = geometry.getAttribute("position");
+        if (!pos || pos.count === 0) {
+          throw new Error("STL has no vertices");
+        }
+        geometry.rotateX(-Math.PI / 2);
+        geometry.computeBoundingBox();
         geometry.computeVertexNormals();
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x9ab6c8,
-          metalness: 0.2,
-          roughness: 0.55,
-          flatShading: false,
+        const mat = new THREE.MeshLambertMaterial({
+          color: 0xc5d4e3,
+          emissive: 0x1a2832,
+          side: THREE.DoubleSide,
         });
         const mesh = new THREE.Mesh(geometry, mat);
         const fitted = wrapFittedModel(mesh);
@@ -226,10 +235,8 @@ function loadModelFromUrl(url) {
         spinGroup.rotation.y = 0;
         contentHolder.add(fitted);
         imageMesh.rotation.set(0, 0, 0);
-      },
-      undefined,
-      onFail
-    );
+      })
+      .catch(() => onFail());
     return;
   }
 
