@@ -183,6 +183,8 @@
         <h2>Display preview</h2>
         <p class="hint" style="margin: 0 0 12px; font-size: 0.82rem">
           Same page as the phone—use it to check the model, zoom, and lighting before looking at the device.
+          In DevTools → Network, pick this iframe as the context (or filter by <code>display-model</code>) to see
+          <code>/api/display/state</code> and STL/GLB downloads.
         </p>
         <div class="preview-frame-wrap">
           <iframe id="displayPreview" src="/display?embed=1" title="Display preview"></iframe>

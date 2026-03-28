@@ -264,6 +264,7 @@ const uploadModel = multer({
 app.use(express.json());
 
 app.get("/api/display/state", (_req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.json({
     panX: displayState.panX,
     panY: displayState.panY,

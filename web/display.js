@@ -22,6 +22,11 @@ function resolveSiteUrl(u) {
   }
 }
 
+function normalizeAssetRef(v) {
+  if (v == null) return "";
+  return String(v).trim();
+}
+
 const container = document.getElementById("three-container");
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -229,6 +234,18 @@ function loadImageFromUrl(url) {
 }
 
 function setFallbackImagePlane() {
+  const alreadyFallback =
+    !useModel &&
+    loadedImageUrl === "" &&
+    !currentTexture &&
+    contentHolder.children.length === 1 &&
+    contentHolder.children[0] === imageMesh &&
+    imageMesh.material &&
+    !imageMesh.material.map;
+  if (alreadyFallback) {
+    applyPanToTexture();
+    return;
+  }
   disposeCurrentTexture();
   imageMesh.geometry.dispose();
   imageMesh.geometry = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE);
@@ -240,7 +257,15 @@ function setFallbackImagePlane() {
 
 function loadModelFromUrl(url) {
   const absUrl = resolveSiteUrl(url);
-  if (!absUrl || absUrl === loadedModelUrl) return;
+  if (!absUrl) {
+    if (normalizeAssetRef(url) !== "") {
+      loadedModelUrl = "";
+      useModel = false;
+      setFallbackImagePlane();
+    }
+    return;
+  }
+  if (absUrl === loadedModelUrl) return;
 
   let pathname = "";
   try {
@@ -335,6 +360,8 @@ function loadModelFromUrl(url) {
 }
 
 function applyDisplayState(state) {
+  if (!state || typeof state !== "object") return;
+
   if (typeof state.panX === "number") panX = state.panX;
   if (typeof state.panY === "number") panY = state.panY;
   if (typeof state.zoom === "number" && Number.isFinite(state.zoom)) {
@@ -343,13 +370,16 @@ function applyDisplayState(state) {
   applyPanToSubject();
   applyCameraZoom();
 
-  if (state.modelUrl) {
-    loadModelFromUrl(state.modelUrl);
+  const modelRef = normalizeAssetRef(state.modelUrl);
+  const imageRef = normalizeAssetRef(state.imageUrl);
+
+  if (modelRef) {
+    loadModelFromUrl(modelRef);
   } else {
     loadedModelUrl = "";
     useModel = false;
-    if (state.imageUrl) {
-      loadImageFromUrl(state.imageUrl);
+    if (imageRef) {
+      loadImageFromUrl(imageRef);
     } else {
       setFallbackImagePlane();
     }
@@ -368,6 +398,21 @@ function recomputeDesiredSpinRate(motorVisual) {
   const speed = Number(motorVisual.speed);
   if (!Number.isFinite(speed)) return 0;
   return speed * Math.PI * 2;
+}
+
+function fetchDisplayStateJson() {
+  return fetch(`/api/display/state?_=${Date.now()}`, { cache: "no-store" }).then((r) => {
+    if (!r.ok) throw new Error(`state ${r.status}`);
+    return r.json();
+  });
+}
+
+function startDisplayStatePolling() {
+  setInterval(() => {
+    fetchDisplayStateJson()
+      .then((s) => applyDisplayState(s))
+      .catch(() => {});
+  }, 2500);
 }
 
 function connectWebSocket() {
@@ -400,17 +445,14 @@ function connectWebSocket() {
 
 setFallbackImagePlane();
 
-fetch("/api/display/state", { cache: "no-store" })
-  .then((r) => {
-    if (!r.ok) throw new Error(`state ${r.status}`);
-    return r.json();
-  })
+fetchDisplayStateJson()
   .then((s) => applyDisplayState(s))
   .catch(() => {
     setFallbackImagePlane();
   })
   .finally(() => {
     connectWebSocket();
+    startDisplayStatePolling();
   });
 
 function animate(now) {
