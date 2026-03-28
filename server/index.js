@@ -30,6 +30,9 @@ const LIMITS = {
 };
 
 const PAN_LIMIT = 2;
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 6;
+const ZOOM_DEFAULT = 1;
 const UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const MODEL_UPLOAD_MAX_BYTES = 32 * 1024 * 1024;
 const ALLOWED_MIME = {
@@ -65,6 +68,7 @@ let lastCommand = null;
 let displayState = {
   panX: 0,
   panY: 0,
+  zoom: ZOOM_DEFAULT,
   imageUrl: "",
   modelUrl: "",
   motorVisual: {
@@ -88,11 +92,17 @@ function clampPan(value) {
   return Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, value));
 }
 
+function clampZoom(value) {
+  if (!Number.isFinite(value)) return ZOOM_DEFAULT;
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, value));
+}
+
 function buildStateMessage() {
   return {
     type: "state",
     panX: displayState.panX,
     panY: displayState.panY,
+    zoom: displayState.zoom,
     imageUrl: displayState.imageUrl,
     modelUrl: displayState.modelUrl,
     motorVisual: { ...displayState.motorVisual },
@@ -128,6 +138,25 @@ function setPan(x, y) {
 function resetPan() {
   displayState.panX = 0;
   displayState.panY = 0;
+  broadcastState();
+}
+
+function resetZoom() {
+  displayState.zoom = ZOOM_DEFAULT;
+  broadcastState();
+}
+
+function applyZoomDelta(delta) {
+  const d = Number(delta);
+  if (!Number.isFinite(d)) return;
+  displayState.zoom = clampZoom(displayState.zoom + d);
+  broadcastState();
+}
+
+function setZoom(value) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return;
+  displayState.zoom = clampZoom(v);
   broadcastState();
 }
 
@@ -173,6 +202,15 @@ function handleWsMessage(raw) {
       break;
     case "resetPan":
       resetPan();
+      break;
+    case "zoomDelta":
+      applyZoomDelta(msg.delta);
+      break;
+    case "zoomSet":
+      setZoom(msg.value);
+      break;
+    case "resetZoom":
+      resetZoom();
       break;
     default:
       break;
@@ -229,6 +267,7 @@ app.get("/api/display/state", (_req, res) => {
   res.json({
     panX: displayState.panX,
     panY: displayState.panY,
+    zoom: displayState.zoom,
     imageUrl: displayState.imageUrl,
     modelUrl: displayState.modelUrl,
     motorVisual: displayState.motorVisual,
@@ -237,6 +276,11 @@ app.get("/api/display/state", (_req, res) => {
 
 app.post("/api/display/pan", (req, res) => {
   const body = req.body || {};
+  if (body.resetView === true) {
+    resetPan();
+    resetZoom();
+    return res.json({ ok: true, ...buildStateMessage() });
+  }
   if (body.reset === true || body.action === "reset") {
     resetPan();
     return res.json({ ok: true, ...buildStateMessage() });
@@ -246,6 +290,20 @@ app.post("/api/display/pan", (req, res) => {
     return res.json({ ok: true, ...buildStateMessage() });
   }
   applyPanDelta(body.dx, body.dy);
+  return res.json({ ok: true, ...buildStateMessage() });
+});
+
+app.post("/api/display/zoom", (req, res) => {
+  const body = req.body || {};
+  if (body.reset === true) {
+    resetZoom();
+    return res.json({ ok: true, ...buildStateMessage() });
+  }
+  if (body.mode === "set" && Number.isFinite(Number(body.value))) {
+    setZoom(body.value);
+    return res.json({ ok: true, ...buildStateMessage() });
+  }
+  applyZoomDelta(body.delta);
   return res.json({ ok: true, ...buildStateMessage() });
 });
 

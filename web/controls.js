@@ -13,11 +13,35 @@ const copyDisplayUrlBtn = document.getElementById("copyDisplayUrl");
 const modelFileInput = document.getElementById("modelFile");
 const imageFileInput = document.getElementById("imageFile");
 const uploadStatusEl = document.getElementById("uploadStatus");
+const displayPreviewIframe = document.getElementById("displayPreview");
+const reloadPreviewBtn = document.getElementById("reloadPreview");
+const zoomValueEl = document.getElementById("zoomValue");
 
 const PAN_STEP = 0.08;
+const ZOOM_STEP = 0.25;
 
 const displayPageUrl = `${window.location.origin}/display`;
 displayUrlEl.textContent = displayPageUrl;
+
+function reloadDisplayPreview() {
+  if (!displayPreviewIframe) return;
+  displayPreviewIframe.src = `${window.location.origin}/display?embed=1&t=${Date.now()}`;
+}
+
+function syncZoomLabel(data) {
+  if (zoomValueEl && data && typeof data.zoom === "number" && Number.isFinite(data.zoom)) {
+    zoomValueEl.textContent = `Zoom: ${data.zoom.toFixed(2)}×`;
+  }
+}
+
+reloadPreviewBtn.addEventListener("click", () => {
+  reloadDisplayPreview();
+});
+
+fetch("/api/display/state")
+  .then((r) => r.json())
+  .then((s) => syncZoomLabel(s))
+  .catch(() => {});
 
 copyDisplayUrlBtn.addEventListener("click", async () => {
   try {
@@ -42,6 +66,19 @@ async function postPan(body) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `Pan failed: ${res.status}`);
+  syncZoomLabel(data);
+  return data;
+}
+
+async function postZoom(body) {
+  const res = await fetch("/api/display/zoom", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Zoom failed: ${res.status}`);
+  syncZoomLabel(data);
   return data;
 }
 
@@ -81,6 +118,36 @@ document.getElementById("panReset").addEventListener("click", async () => {
   }
 });
 
+document.getElementById("resetView").addEventListener("click", async () => {
+  try {
+    await postPan({ resetView: true });
+  } catch (e) {
+    uploadStatusEl.textContent = e.message;
+  }
+});
+
+document.getElementById("zoomIn").addEventListener("click", async () => {
+  try {
+    await postZoom({ delta: ZOOM_STEP });
+  } catch (e) {
+    uploadStatusEl.textContent = e.message;
+  }
+});
+document.getElementById("zoomOut").addEventListener("click", async () => {
+  try {
+    await postZoom({ delta: -ZOOM_STEP });
+  } catch (e) {
+    uploadStatusEl.textContent = e.message;
+  }
+});
+document.getElementById("zoomReset").addEventListener("click", async () => {
+  try {
+    await postZoom({ reset: true });
+  } catch (e) {
+    uploadStatusEl.textContent = e.message;
+  }
+});
+
 modelFileInput.addEventListener("change", async () => {
   const file = modelFileInput.files && modelFileInput.files[0];
   if (!file) return;
@@ -96,6 +163,7 @@ modelFileInput.addEventListener("change", async () => {
     if (!res.ok) throw new Error(data.error || `Model upload failed: ${res.status}`);
     uploadStatusEl.textContent = `Model uploaded. Display: ${data.modelUrl}`;
     modelFileInput.value = "";
+    reloadDisplayPreview();
   } catch (e) {
     uploadStatusEl.textContent = e.message;
   }
@@ -116,6 +184,7 @@ imageFileInput.addEventListener("change", async () => {
     if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
     uploadStatusEl.textContent = `Image uploaded. Display will use: ${data.imageUrl} (3D model cleared)`;
     imageFileInput.value = "";
+    reloadDisplayPreview();
   } catch (e) {
     uploadStatusEl.textContent = e.message;
   }

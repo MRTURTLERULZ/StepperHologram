@@ -2,14 +2,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
 import { STLLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/STLLoader.js";
 
+const urlParams = new URLSearchParams(window.location.search);
+const isEmbedPreview = urlParams.get("embed") === "1";
+
 const container = document.getElementById("three-container");
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 3));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isEmbedPreview ? 2 : 3));
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1;
+renderer.toneMapping = THREE.NoToneMapping;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -18,18 +20,41 @@ scene.background = new THREE.Color(0x05080c);
 const camera = new THREE.PerspectiveCamera(
   50,
   container.clientWidth / container.clientHeight,
-  0.1,
-  100
+  0.05,
+  500
 );
-camera.position.set(0, 0.35, 3.6);
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+const BASE_CAM_X = 0;
+const BASE_CAM_Y = 0.35;
+const BASE_CAM_Z = 3.6;
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 6;
+
+let zoomLevel = 1;
+
+function clampClientZoom(z) {
+  if (!Number.isFinite(z)) return 1;
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+}
+
+function applyCameraZoom() {
+  const z = clampClientZoom(zoomLevel);
+  camera.position.set(BASE_CAM_X, BASE_CAM_Y, BASE_CAM_Z / z);
+  camera.lookAt(0, 0, 0);
+}
+
+applyCameraZoom();
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.82);
 scene.add(ambient);
-const keyLight = new THREE.DirectionalLight(0xe8f0ff, 1.1);
-keyLight.position.set(3, 5, 4);
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+keyLight.position.set(4, 6, 5);
 scene.add(keyLight);
-const rim = new THREE.DirectionalLight(0x406080, 0.35);
-rim.position.set(-3, 2, -4);
+const fill = new THREE.DirectionalLight(0xb8c8e0, 0.55);
+fill.position.set(-4, 2, -3);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0x7090b0, 0.45);
+rim.position.set(-2, 3, -5);
 scene.add(rim);
 
 const spinGroup = new THREE.Group();
@@ -220,9 +245,11 @@ function loadModelFromUrl(url) {
         geometry.rotateX(-Math.PI / 2);
         geometry.computeBoundingBox();
         geometry.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({
-          color: 0xc5d4e3,
-          emissive: 0x1a2832,
+        const mat = new THREE.MeshPhongMaterial({
+          color: 0xd8e6f2,
+          emissive: 0x2a3844,
+          specular: 0x8899aa,
+          shininess: 48,
           side: THREE.DoubleSide,
         });
         const mesh = new THREE.Mesh(geometry, mat);
@@ -246,11 +273,15 @@ function loadModelFromUrl(url) {
       (gltf) => {
         const root = gltf.scene;
         root.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = false;
-            child.receiveShadow = false;
-            if (child.material && child.material.map) {
-              child.material.map.colorSpace = THREE.SRGBColorSpace;
+          if (!child.isMesh || !child.material) return;
+          child.castShadow = false;
+          child.receiveShadow = false;
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          for (const m of mats) {
+            if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+            if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+              m.envMapIntensity = 0;
+              m.emissiveIntensity = Math.max(m.emissiveIntensity || 0, 0.2);
             }
           }
         });
@@ -276,7 +307,11 @@ function loadModelFromUrl(url) {
 function applyDisplayState(state) {
   if (typeof state.panX === "number") panX = state.panX;
   if (typeof state.panY === "number") panY = state.panY;
+  if (typeof state.zoom === "number" && Number.isFinite(state.zoom)) {
+    zoomLevel = clampClientZoom(state.zoom);
+  }
   applyPanToSubject();
+  applyCameraZoom();
 
   if (state.modelUrl) {
     loadModelFromUrl(state.modelUrl);
@@ -367,6 +402,7 @@ window.addEventListener("resize", () => {
   renderer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  applyCameraZoom();
 });
 
 requestAnimationFrame(animate);

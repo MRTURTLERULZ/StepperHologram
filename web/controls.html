@@ -26,7 +26,7 @@
         padding: 20px;
       }
       .wrap {
-        max-width: 520px;
+        max-width: 560px;
         margin: 0 auto;
       }
       h1 {
@@ -133,6 +133,35 @@
         font-size: 0.85rem;
         opacity: 0.9;
       }
+      .preview-section .preview-frame-wrap {
+        aspect-ratio: 9 / 16;
+        width: 100%;
+        max-width: 280px;
+        max-height: 420px;
+        margin: 0 auto 10px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #000;
+      }
+      .preview-section iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      .zoom-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      #zoomValue {
+        font-size: 0.9rem;
+        opacity: 0.95;
+        min-width: 7rem;
+      }
     </style>
   </head>
   <body>
@@ -149,6 +178,17 @@
         <div id="displayUrl"></div>
         <button type="button" id="copyDisplayUrl">Copy URL</button>
       </div>
+
+      <section class="preview-section">
+        <h2>Display preview</h2>
+        <p class="hint" style="margin: 0 0 12px; font-size: 0.82rem">
+          Same page as the phone—use it to check the model, zoom, and lighting before looking at the device.
+        </p>
+        <div class="preview-frame-wrap">
+          <iframe id="displayPreview" src="/display?embed=1" title="Display preview"></iframe>
+        </div>
+        <button type="button" id="reloadPreview">Reload preview</button>
+      </section>
 
       <section>
         <h2>3D model (CAD)</h2>
@@ -176,7 +216,7 @@
       </section>
 
       <section>
-        <h2>Pan (display)</h2>
+        <h2>Pan &amp; zoom (display)</h2>
         <div class="pad">
           <span></span>
           <button type="button" id="panUp" title="Pan up">Up</button>
@@ -188,7 +228,16 @@
           <button type="button" id="panDown">Down</button>
           <span></span>
         </div>
-        <button type="button" id="panReset">Reset pan</button>
+        <div class="buttons" style="margin-top: 8px">
+          <button type="button" id="panReset">Reset pan</button>
+          <button type="button" id="resetView">Reset pan &amp; zoom</button>
+        </div>
+        <div class="zoom-row">
+          <button type="button" id="zoomOut" title="Zoom out">Zoom −</button>
+          <button type="button" id="zoomIn" title="Zoom in">Zoom +</button>
+          <button type="button" id="zoomReset">Zoom 1×</button>
+          <span id="zoomValue">Zoom: —</span>
+        </div>
       </section>
 
       <section>
