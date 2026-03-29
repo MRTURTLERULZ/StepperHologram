@@ -12,6 +12,13 @@ window.addEventListener("unhandledrejection", (ev) => {
 const urlParams = new URLSearchParams(window.location.search);
 const isEmbedPreview = urlParams.get("embed") === "1";
 
+/** Lower = higher FPS (fewer pixels). Default 1 targets 120 Hz displays; add ?dpr=2 for sharper. */
+const dprParam = urlParams.get("dpr");
+const maxDevicePixelRatio =
+  dprParam != null && dprParam !== ""
+    ? Math.min(3, Math.max(0.5, Number(dprParam)))
+    : 1;
+
 function resolveSiteUrl(u) {
   if (u == null) return "";
   const t = String(u).trim();
@@ -32,28 +39,26 @@ function normalizeModelUrl(v) {
 
 const container = document.getElementById("three-container");
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, isEmbedPreview ? 2 : 3));
+const renderer = new THREE.WebGLRenderer({
+  antialias: false,
+  alpha: false,
+  depth: true,
+  stencil: false,
+  powerPreference: "high-performance",
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDevicePixelRatio));
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.9;
+renderer.toneMapping = THREE.NoToneMapping;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c1520);
 
-scene.add(new THREE.AmbientLight(0x607090, 0.38));
-scene.add(new THREE.HemisphereLight(0xa0b8d8, 0x1a2430, 0.62));
-const keyLight = new THREE.DirectionalLight(0xfff5e8, 1.12);
-keyLight.position.set(2.8, 5.2, 4);
+scene.add(new THREE.AmbientLight(0x7a8fa8, 0.58));
+const keyLight = new THREE.DirectionalLight(0xf2f6ff, 1);
+keyLight.position.set(2.6, 4.8, 3.6);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xc8dcff, 0.4);
-fillLight.position.set(-4.2, 1.8, -1.2);
-scene.add(fillLight);
-const rimLight = new THREE.DirectionalLight(0x7ec8ff, 0.36);
-rimLight.position.set(0.4, -2.8, -4.2);
-scene.add(rimLight);
 
 const camera = new THREE.PerspectiveCamera(
   50,
@@ -93,11 +98,10 @@ const PLANE_SIZE = 2.4;
 const TARGET_MODEL_SIZE = 2.35;
 const PAN_POSITION_SCALE = 0.55;
 
-const placeholderMaterial = new THREE.MeshStandardMaterial({
-  color: 0x4a9cc8,
-  metalness: 0.06,
-  roughness: 0.82,
+const placeholderMaterial = new THREE.MeshLambertMaterial({
+  color: 0x5cb0e8,
   side: THREE.DoubleSide,
+  precision: "mediump",
 });
 const placeholderMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE),
@@ -296,11 +300,10 @@ function loadStlFromUrl(url) {
       if (!bb || bb.isEmpty()) {
         throw new Error("STL has empty bounds");
       }
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0xb8d4e8,
-        metalness: 0.1,
-        roughness: 0.48,
+      const mat = new THREE.MeshLambertMaterial({
+        color: 0xc8dce8,
         side: THREE.DoubleSide,
+        precision: "mediump",
       });
       const mesh = new THREE.Mesh(geometry, mat);
       mesh.rotation.x = -Math.PI / 2;
@@ -425,7 +428,7 @@ function animate(now) {
   const dt = (now - lastFrame) / 1000;
   lastFrame = now;
 
-  const blend = Math.min(1, dt * 6);
+  const blend = Math.min(1, dt * 22);
   spinRateRadPerSec += (desiredSpinRate - spinRateRadPerSec) * blend;
 
   if (useModel) {
@@ -436,8 +439,9 @@ function animate(now) {
   }
 
   renderer.render(scene, camera);
-  requestAnimationFrame(animate);
 }
+
+renderer.setAnimationLoop(animate);
 
 window.addEventListener("resize", () => {
   const w = container.clientWidth;
@@ -448,4 +452,3 @@ window.addEventListener("resize", () => {
   applyCameraZoom();
 });
 
-requestAnimationFrame(animate);
