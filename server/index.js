@@ -35,6 +35,7 @@ const LIMITS = {
 };
 
 const PAN_LIMIT = 2;
+const ROT_LIMIT = 1.4;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 6;
 const ZOOM_DEFAULT = 1;
@@ -60,6 +61,9 @@ let lastCommand = null;
 let displayState = {
   panX: 0,
   panY: 0,
+  rotX: 0,
+  rotY: 0,
+  rotZ: 0,
   zoom: ZOOM_DEFAULT,
   modelUrl: "",
   motorVisual: {
@@ -87,11 +91,19 @@ function clampZoom(value) {
   return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, value));
 }
 
+function clampRot(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(-ROT_LIMIT, Math.min(ROT_LIMIT, value));
+}
+
 function buildStateMessage() {
   return {
     type: "state",
     panX: displayState.panX,
     panY: displayState.panY,
+    rotX: displayState.rotX,
+    rotY: displayState.rotY,
+    rotZ: displayState.rotZ,
     zoom: displayState.zoom,
     modelUrl: displayState.modelUrl,
     motorVisual: { ...displayState.motorVisual },
@@ -132,6 +144,34 @@ function resetPan() {
 
 function resetZoom() {
   displayState.zoom = ZOOM_DEFAULT;
+  broadcastState();
+}
+
+function applyRotDelta(drx, dry, drz) {
+  const a = Number(drx);
+  const b = Number(dry);
+  const c = Number(drz);
+  if (!Number.isFinite(a) && !Number.isFinite(b) && !Number.isFinite(c)) return;
+  displayState.rotX = clampRot(displayState.rotX + (Number.isFinite(a) ? a : 0));
+  displayState.rotY = clampRot(displayState.rotY + (Number.isFinite(b) ? b : 0));
+  displayState.rotZ = clampRot(displayState.rotZ + (Number.isFinite(c) ? c : 0));
+  broadcastState();
+}
+
+function setRot(rx, ry, rz) {
+  const x = Number(rx);
+  const y = Number(ry);
+  const z = Number(rz);
+  if (Number.isFinite(x)) displayState.rotX = clampRot(x);
+  if (Number.isFinite(y)) displayState.rotY = clampRot(y);
+  if (Number.isFinite(z)) displayState.rotZ = clampRot(z);
+  broadcastState();
+}
+
+function resetRot() {
+  displayState.rotX = 0;
+  displayState.rotY = 0;
+  displayState.rotZ = 0;
   broadcastState();
 }
 
@@ -201,6 +241,15 @@ function handleWsMessage(raw) {
     case "resetZoom":
       resetZoom();
       break;
+    case "rotateDelta":
+      applyRotDelta(msg.drx, msg.dry, msg.drz);
+      break;
+    case "rotateSet":
+      setRot(msg.rx, msg.ry, msg.rz);
+      break;
+    case "resetRotate":
+      resetRot();
+      break;
     default:
       break;
   }
@@ -237,6 +286,9 @@ app.get("/api/display/state", (req, res) => {
   res.json({
     panX: displayState.panX,
     panY: displayState.panY,
+    rotX: displayState.rotX,
+    rotY: displayState.rotY,
+    rotZ: displayState.rotZ,
     zoom: displayState.zoom,
     modelUrl: displayState.modelUrl,
     motorVisual: displayState.motorVisual,
@@ -248,6 +300,7 @@ app.post("/api/display/pan", (req, res) => {
   if (body.resetView === true) {
     resetPan();
     resetZoom();
+    resetRot();
     return res.json({ ok: true, ...buildStateMessage() });
   }
   if (body.reset === true || body.action === "reset") {
@@ -273,6 +326,20 @@ app.post("/api/display/zoom", (req, res) => {
     return res.json({ ok: true, ...buildStateMessage() });
   }
   applyZoomDelta(body.delta);
+  return res.json({ ok: true, ...buildStateMessage() });
+});
+
+app.post("/api/display/rotate", (req, res) => {
+  const body = req.body || {};
+  if (body.reset === true || body.action === "reset") {
+    resetRot();
+    return res.json({ ok: true, ...buildStateMessage() });
+  }
+  if (body.mode === "set") {
+    setRot(body.rx, body.ry, body.rz);
+    return res.json({ ok: true, ...buildStateMessage() });
+  }
+  applyRotDelta(body.drx, body.dry, body.drz);
   return res.json({ ok: true, ...buildStateMessage() });
 });
 

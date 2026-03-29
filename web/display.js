@@ -91,9 +91,16 @@ const placeholderMesh = new THREE.Mesh(
 
 let panX = 0;
 let panY = 0;
+let rotX = 0;
+let rotY = 0;
+let rotZ = 0;
 
 function applyPanToSubject() {
   spinGroup.position.set(panX * PAN_POSITION_SCALE, panY * PAN_POSITION_SCALE, 0);
+}
+
+function applyRotationToSubject() {
+  contentHolder.rotation.set(rotX, rotY, rotZ);
 }
 
 let loadedModelUrl = "";
@@ -301,10 +308,14 @@ function applyDisplayState(state) {
 
   if (typeof state.panX === "number") panX = state.panX;
   if (typeof state.panY === "number") panY = state.panY;
+  if (typeof state.rotX === "number" && Number.isFinite(state.rotX)) rotX = state.rotX;
+  if (typeof state.rotY === "number" && Number.isFinite(state.rotY)) rotY = state.rotY;
+  if (typeof state.rotZ === "number" && Number.isFinite(state.rotZ)) rotZ = state.rotZ;
   if (typeof state.zoom === "number" && Number.isFinite(state.zoom)) {
     zoomLevel = clampClientZoom(state.zoom);
   }
   applyPanToSubject();
+  applyRotationToSubject();
   applyCameraZoom();
 
   const modelRef = normalizeModelUrl(state.modelUrl);

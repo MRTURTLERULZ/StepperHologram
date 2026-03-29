@@ -15,9 +15,11 @@ const uploadStatusEl = document.getElementById("uploadStatus");
 const displayPreviewIframe = document.getElementById("displayPreview");
 const reloadPreviewBtn = document.getElementById("reloadPreview");
 const zoomValueEl = document.getElementById("zoomValue");
+const rotationValueEl = document.getElementById("rotationValue");
 
 const PAN_STEP = 0.08;
 const ZOOM_STEP = 0.25;
+const ROT_STEP = 0.08;
 
 const displayPageUrl = `${window.location.origin}/display`;
 displayUrlEl.textContent = displayPageUrl;
@@ -33,13 +35,28 @@ function syncZoomLabel(data) {
   }
 }
 
+function syncRotationLabel(data) {
+  if (!rotationValueEl || !data) return;
+  const rx = data.rotX;
+  const ry = data.rotY;
+  const rz = data.rotZ;
+  if (![rx, ry, rz].every((v) => typeof v === "number" && Number.isFinite(v))) return;
+  const deg = (r) => Math.round((r * 180) / Math.PI);
+  rotationValueEl.textContent = `Rot (°): P ${deg(rx)}  Y ${deg(ry)}  R ${deg(rz)}`;
+}
+
+function syncViewLabels(data) {
+  syncZoomLabel(data);
+  syncRotationLabel(data);
+}
+
 reloadPreviewBtn.addEventListener("click", () => {
   reloadDisplayPreview();
 });
 
 fetch("/api/display/state")
   .then((r) => r.json())
-  .then((s) => syncZoomLabel(s))
+  .then((s) => syncViewLabels(s))
   .catch(() => {});
 
 copyDisplayUrlBtn.addEventListener("click", async () => {
@@ -65,7 +82,7 @@ async function postPan(body) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `Pan failed: ${res.status}`);
-  syncZoomLabel(data);
+  syncViewLabels(data);
   return data;
 }
 
@@ -77,9 +94,45 @@ async function postZoom(body) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `Zoom failed: ${res.status}`);
-  syncZoomLabel(data);
+  syncViewLabels(data);
   return data;
 }
+
+async function postRotate(body) {
+  const res = await fetch("/api/display/rotate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Rotate failed: ${res.status}`);
+  syncViewLabels(data);
+  return data;
+}
+
+function bindRotateClick(id, body) {
+  document.getElementById(id).addEventListener("click", async () => {
+    try {
+      await postRotate(body);
+    } catch (e) {
+      uploadStatusEl.textContent = e.message;
+    }
+  });
+}
+
+bindRotateClick("rotPitchDown", { drx: -ROT_STEP });
+bindRotateClick("rotPitchUp", { drx: ROT_STEP });
+bindRotateClick("rotYawLeft", { dry: -ROT_STEP });
+bindRotateClick("rotYawRight", { dry: ROT_STEP });
+bindRotateClick("rotRollLeft", { drz: -ROT_STEP });
+bindRotateClick("rotRollRight", { drz: ROT_STEP });
+document.getElementById("rotReset").addEventListener("click", async () => {
+  try {
+    await postRotate({ reset: true });
+  } catch (e) {
+    uploadStatusEl.textContent = e.message;
+  }
+});
 
 document.getElementById("panUp").addEventListener("click", async () => {
   try {

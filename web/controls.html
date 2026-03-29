@@ -162,6 +162,18 @@
         opacity: 0.95;
         min-width: 7rem;
       }
+      .axis-label {
+        font-size: 0.78rem;
+        opacity: 0.88;
+        min-width: 4.75rem;
+        flex-shrink: 0;
+      }
+      .rot-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 10px;
+      }
     </style>
   </head>
   <body>
@@ -201,7 +213,7 @@
       </section>
 
       <section>
-        <h2>Pan &amp; zoom (display)</h2>
+        <h2>Pan, zoom &amp; rotation (display)</h2>
         <div class="pad">
           <span></span>
           <button type="button" id="panUp" title="Pan up">Up</button>
@@ -215,13 +227,38 @@
         </div>
         <div class="buttons" style="margin-top: 8px">
           <button type="button" id="panReset">Reset pan</button>
-          <button type="button" id="resetView">Reset pan &amp; zoom</button>
+          <button type="button" id="resetView">Reset view</button>
         </div>
         <div class="zoom-row">
           <button type="button" id="zoomOut" title="Zoom out">Zoom −</button>
           <button type="button" id="zoomIn" title="Zoom in">Zoom +</button>
           <button type="button" id="zoomReset">Zoom 1×</button>
           <span id="zoomValue">Zoom: —</span>
+        </div>
+        <p class="hint" style="margin: 12px 0 0; font-size: 0.82rem">
+          Rotation is applied to the model (inside the motor spin). Pitch = tilt around X, yaw = extra twist around Y,
+          roll = around Z.
+        </p>
+        <div class="rot-grid">
+          <div class="zoom-row">
+            <span class="axis-label">Pitch (tilt)</span>
+            <button type="button" id="rotPitchDown" title="Tilt down (pitch −)">Pitch −</button>
+            <button type="button" id="rotPitchUp" title="Tilt up (pitch +)">Pitch +</button>
+          </div>
+          <div class="zoom-row">
+            <span class="axis-label">Yaw (twist)</span>
+            <button type="button" id="rotYawLeft" title="Yaw left">Yaw −</button>
+            <button type="button" id="rotYawRight" title="Yaw right">Yaw +</button>
+          </div>
+          <div class="zoom-row">
+            <span class="axis-label">Roll</span>
+            <button type="button" id="rotRollLeft" title="Roll counterclockwise">Roll −</button>
+            <button type="button" id="rotRollRight" title="Roll clockwise">Roll +</button>
+            <button type="button" id="rotReset">Reset rotation</button>
+          </div>
+          <div class="zoom-row">
+            <span id="rotationValue" style="font-size: 0.9rem; opacity: 0.95">Rot (°): —</span>
+          </div>
         </div>
       </section>
 
