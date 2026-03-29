@@ -11,7 +11,6 @@ const microstepsInput = document.getElementById("microsteps");
 const displayUrlEl = document.getElementById("displayUrl");
 const copyDisplayUrlBtn = document.getElementById("copyDisplayUrl");
 const modelFileInput = document.getElementById("modelFile");
-const imageFileInput = document.getElementById("imageFile");
 const uploadStatusEl = document.getElementById("uploadStatus");
 const displayPreviewIframe = document.getElementById("displayPreview");
 const reloadPreviewBtn = document.getElementById("reloadPreview");
@@ -151,7 +150,7 @@ document.getElementById("zoomReset").addEventListener("click", async () => {
 modelFileInput.addEventListener("change", async () => {
   const file = modelFileInput.files && modelFileInput.files[0];
   if (!file) return;
-  uploadStatusEl.textContent = "Uploading 3D model…";
+  uploadStatusEl.textContent = "Uploading STL…";
   const fd = new FormData();
   fd.append("model", file);
   try {
@@ -160,30 +159,9 @@ modelFileInput.addEventListener("change", async () => {
       body: fd,
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `Model upload failed: ${res.status}`);
-    uploadStatusEl.textContent = `Model uploaded. Display: ${data.modelUrl}`;
-    modelFileInput.value = "";
-    reloadDisplayPreview();
-  } catch (e) {
-    uploadStatusEl.textContent = e.message;
-  }
-});
-
-imageFileInput.addEventListener("change", async () => {
-  const file = imageFileInput.files && imageFileInput.files[0];
-  if (!file) return;
-  uploadStatusEl.textContent = "Uploading image…";
-  const fd = new FormData();
-  fd.append("image", file);
-  try {
-    const res = await fetch("/api/display/upload", {
-      method: "POST",
-      body: fd,
-    });
-    const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Upload failed: ${res.status}`);
-    uploadStatusEl.textContent = `Image uploaded. Display will use: ${data.imageUrl} (3D model cleared)`;
-    imageFileInput.value = "";
+    uploadStatusEl.textContent = `STL uploaded: ${data.modelUrl}`;
+    modelFileInput.value = "";
     reloadDisplayPreview();
   } catch (e) {
     uploadStatusEl.textContent = e.message;

@@ -1,7 +1,7 @@
 {
   "name": "stepperholo",
   "version": "1.0.0",
-  "description": "Rubik Pi 3 stepper motor control with Three.js UI",
+  "description": "Rubik Pi 3 stepper motor control with STL display (Three.js)",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

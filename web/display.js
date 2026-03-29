@@ -1,14 +1,9 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
 import { STLLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/STLLoader.js";
 
 const urlParams = new URLSearchParams(window.location.search);
 const isEmbedPreview = urlParams.get("embed") === "1";
 
-/**
- * Turn API paths like /uploads/foo.stl or uploads/foo.stl into a full URL from the site origin.
- * Relative paths without a leading slash would otherwise resolve under /display/... and 404.
- */
 function resolveSiteUrl(u) {
   if (u == null) return "";
   const t = String(u).trim();
@@ -22,7 +17,7 @@ function resolveSiteUrl(u) {
   }
 }
 
-function normalizeAssetRef(v) {
+function normalizeModelUrl(v) {
   if (v == null) return "";
   return String(v).trim();
 }
@@ -67,18 +62,6 @@ function applyCameraZoom() {
 
 applyCameraZoom();
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.82);
-scene.add(ambient);
-const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
-keyLight.position.set(4, 6, 5);
-scene.add(keyLight);
-const fill = new THREE.DirectionalLight(0xb8c8e0, 0.55);
-fill.position.set(-4, 2, -3);
-scene.add(fill);
-const rim = new THREE.DirectionalLight(0x7090b0, 0.45);
-rim.position.set(-2, 3, -5);
-scene.add(rim);
-
 const spinGroup = new THREE.Group();
 scene.add(spinGroup);
 
@@ -89,11 +72,14 @@ const PLANE_SIZE = 2.4;
 const TARGET_MODEL_SIZE = 2.35;
 const PAN_POSITION_SCALE = 0.55;
 
-const fallbackMaterial = new THREE.MeshBasicMaterial({
+const placeholderMaterial = new THREE.MeshBasicMaterial({
   color: 0x3cc0ff,
   side: THREE.DoubleSide,
 });
-const imageMesh = new THREE.Mesh(new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE), fallbackMaterial.clone());
+const placeholderMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE),
+  placeholderMaterial.clone()
+);
 
 let panX = 0;
 let panY = 0;
@@ -102,20 +88,9 @@ function applyPanToSubject() {
   spinGroup.position.set(panX * PAN_POSITION_SCALE, panY * PAN_POSITION_SCALE, 0);
 }
 
-function applyPanToTexture() {
-  const map = imageMesh.material && imageMesh.material.map;
-  if (map) {
-    map.offset.set(panX, panY);
-  }
-}
-
-let currentTexture = null;
-let loadedImageUrl = "";
 let loadedModelUrl = "";
 let useModel = false;
 
-const texLoader = new THREE.TextureLoader();
-const gltfLoader = new GLTFLoader();
 const stlLoader = new STLLoader();
 
 const hintEl = document.getElementById("display-hint");
@@ -124,7 +99,6 @@ function setLoadHint(text) {
   if (hintEl) hintEl.textContent = text || "";
 }
 
-/** Binary STL: 80-byte header + uint32 triangle count + 50 bytes per triangle */
 function isLikelyBinaryStl(buffer) {
   const len = buffer.byteLength;
   if (len < 84) return false;
@@ -184,21 +158,11 @@ function parseStlArrayBuffer(buffer) {
 
 function disposeObjectTree(root) {
   root.traverse((obj) => {
-    if (obj.geometry) {
-      obj.geometry.dispose();
-    }
+    if (obj.geometry) obj.geometry.dispose();
     if (obj.material) {
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
       for (const m of mats) {
         if (m.map) m.map.dispose();
-        if (m.lightMap) m.lightMap.dispose();
-        if (m.aoMap) m.aoMap.dispose();
-        if (m.emissiveMap) m.emissiveMap.dispose();
-        if (m.normalMap) m.normalMap.dispose();
-        if (m.bumpMap) m.bumpMap.dispose();
-        if (m.displacementMap) m.displacementMap.dispose();
-        if (m.roughnessMap) m.roughnessMap.dispose();
-        if (m.metalnessMap) m.metalnessMap.dispose();
         m.dispose();
       }
     }
@@ -209,7 +173,7 @@ function clearContentHolder() {
   while (contentHolder.children.length > 0) {
     const ch = contentHolder.children[0];
     contentHolder.remove(ch);
-    if (ch !== imageMesh) {
+    if (ch !== placeholderMesh) {
       disposeObjectTree(ch);
     }
   }
@@ -234,98 +198,32 @@ function wrapFittedModel(object3D) {
   return wrap;
 }
 
-function showImageMode() {
+function setPlaceholderPlane() {
+  const already =
+    !useModel &&
+    contentHolder.children.length === 1 &&
+    contentHolder.children[0] === placeholderMesh &&
+    placeholderMesh.material &&
+    !placeholderMesh.material.map;
+  if (already) return;
+
+  clearContentHolder();
+  placeholderMesh.geometry.dispose();
+  placeholderMesh.geometry = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE);
+  placeholderMesh.material.dispose();
+  placeholderMesh.material = placeholderMaterial.clone();
   useModel = false;
   spinGroup.rotation.y = 0;
-  clearContentHolder();
-  contentHolder.add(imageMesh);
-  applyPanToTexture();
+  contentHolder.add(placeholderMesh);
 }
 
-function disposeCurrentTexture() {
-  if (currentTexture) {
-    currentTexture.dispose();
-    currentTexture = null;
-  }
-}
-
-function applyTextureToMesh(texture, url) {
-  disposeCurrentTexture();
-  currentTexture = texture;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.center.set(0.5, 0.5);
-
-  const aspect =
-    texture.image && texture.image.width && texture.image.height
-      ? texture.image.width / texture.image.height
-      : 1;
-  let w = PLANE_SIZE;
-  let h = PLANE_SIZE;
-  if (aspect >= 1) {
-    h = PLANE_SIZE / aspect;
-  } else {
-    w = PLANE_SIZE * aspect;
-  }
-
-  imageMesh.geometry.dispose();
-  imageMesh.geometry = new THREE.PlaneGeometry(w, h);
-
-  const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    side: THREE.DoubleSide,
-    transparent: true,
-  });
-  imageMesh.material.dispose();
-  imageMesh.material = mat;
-  loadedImageUrl = url;
-  showImageMode();
-  applyPanToTexture();
-}
-
-function loadImageFromUrl(url) {
-  const absUrl = resolveSiteUrl(url);
-  if (!absUrl || absUrl === loadedImageUrl) return;
-  texLoader.load(
-    absUrl,
-    (tex) => applyTextureToMesh(tex, absUrl),
-    undefined,
-    () => {
-      loadedImageUrl = "";
-    }
-  );
-}
-
-function setFallbackImagePlane() {
-  const alreadyFallback =
-    !useModel &&
-    loadedImageUrl === "" &&
-    !currentTexture &&
-    contentHolder.children.length === 1 &&
-    contentHolder.children[0] === imageMesh &&
-    imageMesh.material &&
-    !imageMesh.material.map;
-  if (alreadyFallback) {
-    applyPanToTexture();
-    return;
-  }
-  disposeCurrentTexture();
-  imageMesh.geometry.dispose();
-  imageMesh.geometry = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE);
-  imageMesh.material.dispose();
-  imageMesh.material = fallbackMaterial.clone();
-  loadedImageUrl = "";
-  showImageMode();
-}
-
-function loadModelFromUrl(url) {
+function loadStlFromUrl(url) {
   const absUrl = resolveSiteUrl(url);
   if (!absUrl) {
-    if (normalizeAssetRef(url) !== "") {
+    if (normalizeModelUrl(url) !== "") {
       loadedModelUrl = "";
       useModel = false;
-      setFallbackImagePlane();
+      setPlaceholderPlane();
     }
     return;
   }
@@ -341,87 +239,49 @@ function loadModelFromUrl(url) {
   const onFail = () => {
     loadedModelUrl = "";
     useModel = false;
-    setFallbackImagePlane();
+    setPlaceholderPlane();
   };
 
-  if (pathname.endsWith(".stl")) {
-    setLoadHint("Loading STL…");
-    fetch(absUrl, { cache: "no-store" })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.arrayBuffer();
-      })
-      .then((buffer) => {
-        const geometry = parseStlArrayBuffer(buffer);
-        geometry.computeBoundingBox();
-        const bb = geometry.boundingBox;
-        if (!bb || bb.isEmpty()) {
-          throw new Error("STL has empty bounds");
-        }
-        const mat = new THREE.MeshBasicMaterial({
-          color: 0x7fd8ff,
-          side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(geometry, mat);
-        mesh.rotation.x = -Math.PI / 2;
-        const fitted = wrapFittedModel(mesh);
-        useModel = true;
-        loadedModelUrl = absUrl;
-        loadedImageUrl = "";
-        disposeCurrentTexture();
-        clearContentHolder();
-        spinGroup.rotation.y = 0;
-        contentHolder.add(fitted);
-        imageMesh.rotation.set(0, 0, 0);
-        setLoadHint("");
-      })
-      .catch((err) => {
-        setLoadHint(`STL error: ${err && err.message ? err.message : "load failed"} — open /uploads/display-model.stl in the browser`);
-        onFail();
-      });
+  if (!pathname.endsWith(".stl")) {
+    setLoadHint("Server model URL must end with .stl");
+    onFail();
     return;
   }
 
-  if (pathname.endsWith(".glb") || pathname.endsWith(".gltf")) {
-    gltfLoader.load(
-      absUrl,
-      (gltf) => {
-        const root = gltf.scene;
-        root.traverse((child) => {
-          if (!child.isMesh || !child.material) return;
-          child.castShadow = false;
-          child.receiveShadow = false;
-          const mats = Array.isArray(child.material) ? child.material : [child.material];
-          for (const m of mats) {
-            if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
-            if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
-              m.envMapIntensity = 0;
-              m.emissiveIntensity = Math.max(m.emissiveIntensity || 0, 0.2);
-            }
-          }
-        });
-        const fitted = wrapFittedModel(root);
-        useModel = true;
-        loadedModelUrl = absUrl;
-        loadedImageUrl = "";
-        disposeCurrentTexture();
-        clearContentHolder();
-        spinGroup.rotation.y = 0;
-        contentHolder.add(fitted);
-        imageMesh.rotation.set(0, 0, 0);
-        setLoadHint("");
-      },
-      undefined,
-      () => {
-        setLoadHint("GLB/GLTF load failed");
-        onFail();
+  setLoadHint("Loading STL…");
+  fetch(absUrl, { cache: "no-store" })
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.arrayBuffer();
+    })
+    .then((buffer) => {
+      const geometry = parseStlArrayBuffer(buffer);
+      geometry.computeBoundingBox();
+      const bb = geometry.boundingBox;
+      if (!bb || bb.isEmpty()) {
+        throw new Error("STL has empty bounds");
       }
-    );
-    return;
-  }
-
-  setLoadHint("Unknown model type (use .stl or .glb)");
-  onFail();
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x7fd8ff,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geometry, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      const fitted = wrapFittedModel(mesh);
+      useModel = true;
+      loadedModelUrl = absUrl;
+      clearContentHolder();
+      spinGroup.rotation.y = 0;
+      contentHolder.add(fitted);
+      placeholderMesh.rotation.set(0, 0, 0);
+      setLoadHint("");
+    })
+    .catch((err) => {
+      setLoadHint(
+        `STL error: ${err && err.message ? err.message : "load failed"} — try opening /uploads/display-model.stl`
+      );
+      onFail();
+    });
 }
 
 function applyDisplayState(state) {
@@ -435,24 +295,16 @@ function applyDisplayState(state) {
   applyPanToSubject();
   applyCameraZoom();
 
-  const modelRef = normalizeAssetRef(state.modelUrl);
-  const imageRef = normalizeAssetRef(state.imageUrl);
-
+  const modelRef = normalizeModelUrl(state.modelUrl);
   if (modelRef) {
-    loadModelFromUrl(modelRef);
+    loadStlFromUrl(modelRef);
   } else {
     loadedModelUrl = "";
     useModel = false;
-    if (imageRef) {
-      setLoadHint("");
-      loadImageFromUrl(imageRef);
-    } else {
-      setLoadHint("");
-      setFallbackImagePlane();
-    }
+    setLoadHint("");
+    setPlaceholderPlane();
   }
 
-  applyPanToTexture();
   desiredSpinRate = recomputeDesiredSpinRate(state.motorVisual);
 }
 
@@ -510,12 +362,12 @@ function connectWebSocket() {
   });
 }
 
-setFallbackImagePlane();
+setPlaceholderPlane();
 
 fetchDisplayStateJson()
   .then((s) => applyDisplayState(s))
   .catch(() => {
-    setFallbackImagePlane();
+    setPlaceholderPlane();
   })
   .finally(() => {
     connectWebSocket();
@@ -533,7 +385,7 @@ function animate(now) {
     spinGroup.rotation.y += spinRateRadPerSec * dt;
   } else {
     spinGroup.rotation.y = 0;
-    imageMesh.rotation.z += spinRateRadPerSec * dt;
+    placeholderMesh.rotation.z += spinRateRadPerSec * dt;
   }
 
   renderer.render(scene, camera);

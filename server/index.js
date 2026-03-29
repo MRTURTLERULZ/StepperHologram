@@ -9,6 +9,10 @@ const { WebSocketServer } = require("ws");
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
+function logDbg(...args) {
+  console.log("[stepperholo]", new Date().toISOString(), ...args);
+}
+
 const projectRoot = path.resolve(__dirname, "..");
 const webDir = path.join(projectRoot, "web");
 const uploadsDir = path.join(webDir, "uploads");
@@ -16,6 +20,7 @@ const stepperSourcePath = path.join(projectRoot, "stepper.c");
 const stepperBinaryPath = path.join(projectRoot, "stepper");
 
 fs.mkdirSync(uploadsDir, { recursive: true });
+logDbg("uploads directory:", uploadsDir, "exists:", fs.existsSync(uploadsDir));
 
 const motorUseSudo =
   process.env.MOTOR_USE_SUDO === "1" || process.env.MOTOR_USE_SUDO === "true";
@@ -33,32 +38,19 @@ const PAN_LIMIT = 2;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 6;
 const ZOOM_DEFAULT = 1;
-const UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const MODEL_UPLOAD_MAX_BYTES = 32 * 1024 * 1024;
-const ALLOWED_MIME = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/webp": ".webp",
-};
 
-const MODEL_MIME_TO_EXT = {
-  "model/gltf-binary": ".glb",
-  "model/gltf+json": ".gltf",
-  "model/stl": ".stl",
-  "application/sla": ".stl",
-  "application/vnd.ms-pki.stl": ".stl",
-};
+const STL_MIMES = new Set([
+  "model/stl",
+  "application/sla",
+  "application/vnd.ms-pki.stl",
+  "application/octet-stream",
+]);
 
-function modelExtFromUpload(file) {
-  const fromMime = MODEL_MIME_TO_EXT[file.mimetype];
-  if (fromMime) return fromMime;
+function isStlUpload(file) {
   const ext = path.extname(file.originalname || "").toLowerCase();
-  if (ext === ".glb" || ext === ".gltf" || ext === ".stl") return ext;
-  return null;
-}
-
-function isAllowedModelUpload(file) {
-  return modelExtFromUpload(file) !== null;
+  if (ext === ".stl") return true;
+  return STL_MIMES.has(file.mimetype);
 }
 
 let activeRun = null;
@@ -69,7 +61,6 @@ let displayState = {
   panX: 0,
   panY: 0,
   zoom: ZOOM_DEFAULT,
-  imageUrl: "",
   modelUrl: "",
   motorVisual: {
     running: false,
@@ -81,7 +72,6 @@ let displayState = {
   },
 };
 
-let imageVersion = 0;
 let modelVersion = 0;
 
 /** @type {import("ws").WebSocket[]} */
@@ -103,7 +93,6 @@ function buildStateMessage() {
     panX: displayState.panX,
     panY: displayState.panY,
     zoom: displayState.zoom,
-    imageUrl: displayState.imageUrl,
     modelUrl: displayState.modelUrl,
     motorVisual: { ...displayState.motorVisual },
   };
@@ -217,35 +206,12 @@ function handleWsMessage(raw) {
   }
 }
 
-const storage = multer.diskStorage({
-  destination(_req, _file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename(_req, file, cb) {
-    const ext = ALLOWED_MIME[file.mimetype] || path.extname(file.originalname) || ".png";
-    cb(null, `display-image${ext}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: UPLOAD_MAX_BYTES },
-  fileFilter(_req, file, cb) {
-    if (ALLOWED_MIME[file.mimetype]) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only PNG, JPEG, and WebP images are allowed"));
-    }
-  },
-});
-
 const modelStorage = multer.diskStorage({
   destination(_req, _file, cb) {
     cb(null, uploadsDir);
   },
-  filename(_req, file, cb) {
-    const ext = modelExtFromUpload(file) || ".glb";
-    cb(null, `display-model${ext}`);
+  filename(_req, _file, cb) {
+    cb(null, "display-model.stl");
   },
 });
 
@@ -253,23 +219,25 @@ const uploadModel = multer({
   storage: modelStorage,
   limits: { fileSize: MODEL_UPLOAD_MAX_BYTES },
   fileFilter(_req, file, cb) {
-    if (isAllowedModelUpload(file)) {
+    if (isStlUpload(file)) {
       cb(null, true);
     } else {
-      cb(new Error("Only GLB, GLTF, and STL models are allowed (export from CAD as GLB or STL)"));
+      cb(new Error("Only STL files (.stl) are allowed"));
     }
   },
 });
 
 app.use(express.json());
 
-app.get("/api/display/state", (_req, res) => {
+app.get("/api/display/state", (req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  if (process.env.STEPPERHOLO_DEBUG_STATE === "1") {
+    logDbg("GET /api/display/state", { modelUrl: displayState.modelUrl, zoom: displayState.zoom, ip: req.ip });
+  }
   res.json({
     panX: displayState.panX,
     panY: displayState.panY,
     zoom: displayState.zoom,
-    imageUrl: displayState.imageUrl,
     modelUrl: displayState.modelUrl,
     motorVisual: displayState.motorVisual,
   });
@@ -308,38 +276,29 @@ app.post("/api/display/zoom", (req, res) => {
   return res.json({ ok: true, ...buildStateMessage() });
 });
 
-app.post("/api/display/upload", (req, res) => {
-  upload.single("image")(req, res, (err) => {
-    if (err) {
-      const message = err.message || "Upload failed";
-      return res.status(400).json({ error: message });
-    }
-    if (!req.file) {
-      return res.status(400).json({ error: "No file field 'image'" });
-    }
-    imageVersion += 1;
-    const publicPath = `/uploads/${req.file.filename}?v=${imageVersion}`;
-    displayState.imageUrl = publicPath;
-    displayState.modelUrl = "";
-    broadcastState();
-    return res.json({ ok: true, imageUrl: publicPath });
-  });
-});
-
 app.post("/api/display/upload-model", (req, res) => {
   uploadModel.single("model")(req, res, (err) => {
     if (err) {
       const message = err.message || "Upload failed";
+      logDbg("STL upload rejected:", message);
       return res.status(400).json({ error: message });
     }
     if (!req.file) {
+      logDbg("STL upload rejected: missing file field 'model'");
       return res.status(400).json({ error: "No file field 'model'" });
     }
     modelVersion += 1;
     const publicPath = `/uploads/${req.file.filename}?v=${modelVersion}`;
     displayState.modelUrl = publicPath;
-    displayState.imageUrl = "";
     broadcastState();
+    logDbg("STL upload OK", {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      savedAs: req.file.path,
+      publicPath,
+      wsClients: wsClients.length,
+    });
     return res.json({ ok: true, modelUrl: publicPath });
   });
 });
@@ -452,6 +411,7 @@ app.post("/api/motor/run", (req, res) => {
       stdout: stdout.trim(),
       stderr: stderr.trim(),
     };
+    logDbg("stepper process exited", { exitCode: _code, signal });
     activeRun = null;
     setMotorVisualIdle();
   });
@@ -468,6 +428,7 @@ app.post("/api/motor/run", (req, res) => {
   };
 
   setMotorVisualRunning(params, activeRun.startedAt);
+  logDbg("POST /api/motor/run", params);
 
   return res.status(202).json({
     message: "Motor run started",
@@ -480,6 +441,7 @@ app.post("/api/motor/stop", (req, res) => {
     return res.status(200).json({ message: "Motor is not running", status: motorStatus() });
   }
 
+  logDbg("POST /api/motor/stop (SIGTERM)");
   activeRun.proc.kill("SIGTERM");
   setMotorVisualIdle();
   return res.status(202).json({ message: "Stop signal sent", status: motorStatus() });
@@ -503,8 +465,9 @@ const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server });
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
   wsClients.push(ws);
+  logDbg("WebSocket connected; clients:", wsClients.length, req.socket?.remoteAddress || "");
   ws.send(JSON.stringify(buildStateMessage()));
 
   ws.on("message", (data) => {
@@ -514,9 +477,10 @@ wss.on("connection", (ws) => {
   ws.on("close", () => {
     const i = wsClients.indexOf(ws);
     if (i !== -1) wsClients.splice(i, 1);
+    logDbg("WebSocket closed; clients:", wsClients.length);
   });
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Stepper web server running on http://0.0.0.0:${port}`);
+  logDbg(`HTTP+WS listening on http://0.0.0.0:${port} (web: ${webDir})`);
 });

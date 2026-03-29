@@ -168,9 +168,8 @@
     <div class="wrap">
       <h1>Stepper Holo — Controls</h1>
       <p class="hint">
-        Open the display URL on your iPhone (same Wi‑Fi as this Pi). Export your CAD as <strong>GLB</strong> (best) or
-        <strong>STL</strong>, upload it below, and the display spins it around the vertical axis. Images still work if you
-        upload a picture instead (that clears the 3D model).
+        Open the display URL on your iPhone (same Wi‑Fi as this Pi). Upload an <strong>STL</strong> below; the display
+        spins it around the vertical axis.
       </p>
 
       <div class="display-url">
@@ -184,7 +183,7 @@
         <p class="hint" style="margin: 0 0 12px; font-size: 0.82rem">
           Same page as the phone—use it to check the model, zoom, and lighting before looking at the device.
           In DevTools → Network, pick this iframe as the context (or filter by <code>display-model</code>) to see
-          <code>/api/display/state</code> and STL/GLB downloads.
+          <code>/api/display/state</code> and the STL download.
         </p>
         <div class="preview-frame-wrap">
           <iframe id="displayPreview" src="/display?embed=1" title="Display preview"></iframe>
@@ -193,26 +192,10 @@
       </section>
 
       <section>
-        <h2>3D model (CAD)</h2>
+        <h2>STL upload</h2>
         <div class="group">
-          <label for="modelFile">Upload GLB, GLTF, or STL</label>
-          <input
-            id="modelFile"
-            type="file"
-            accept=".glb,.gltf,.stl,model/gltf-binary,model/stl,application/sla"
-          />
-        </div>
-        <p class="hint" style="margin: 0 0 10px; font-size: 0.82rem">
-          Prefer a single <code>.glb</code> from Blender, Fusion, etc. Plain <code>.gltf</code> with separate
-          <code>.bin</code> files is not supported over this uploader—use GLB.
-        </p>
-      </section>
-
-      <section>
-        <h2>Display image</h2>
-        <div class="group">
-          <label for="imageFile">Upload image instead (PNG, JPEG, WebP)</label>
-          <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp,image/*" />
+          <label for="modelFile">Upload <code>.stl</code></label>
+          <input id="modelFile" type="file" accept=".stl,model/stl,application/sla" />
         </div>
         <div id="uploadStatus"></div>
       </section>
