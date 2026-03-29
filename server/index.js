@@ -35,7 +35,6 @@ const LIMITS = {
 };
 
 const PAN_LIMIT = 2;
-const ROT_LIMIT = 1.4;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 6;
 const ZOOM_DEFAULT = 1;
@@ -91,9 +90,12 @@ function clampZoom(value) {
   return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, value));
 }
 
-function clampRot(value) {
+/** Map any angle to (−π, π] so a full turn is representable without an artificial cap. */
+function normalizeRotRad(value) {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(-ROT_LIMIT, Math.min(ROT_LIMIT, value));
+  const twoPi = 2 * Math.PI;
+  let x = value - twoPi * Math.floor((value + Math.PI) / twoPi);
+  return x;
 }
 
 function buildStateMessage() {
@@ -152,9 +154,9 @@ function applyRotDelta(drx, dry, drz) {
   const b = Number(dry);
   const c = Number(drz);
   if (!Number.isFinite(a) && !Number.isFinite(b) && !Number.isFinite(c)) return;
-  displayState.rotX = clampRot(displayState.rotX + (Number.isFinite(a) ? a : 0));
-  displayState.rotY = clampRot(displayState.rotY + (Number.isFinite(b) ? b : 0));
-  displayState.rotZ = clampRot(displayState.rotZ + (Number.isFinite(c) ? c : 0));
+  displayState.rotX = normalizeRotRad(displayState.rotX + (Number.isFinite(a) ? a : 0));
+  displayState.rotY = normalizeRotRad(displayState.rotY + (Number.isFinite(b) ? b : 0));
+  displayState.rotZ = normalizeRotRad(displayState.rotZ + (Number.isFinite(c) ? c : 0));
   broadcastState();
 }
 
@@ -162,9 +164,9 @@ function setRot(rx, ry, rz) {
   const x = Number(rx);
   const y = Number(ry);
   const z = Number(rz);
-  if (Number.isFinite(x)) displayState.rotX = clampRot(x);
-  if (Number.isFinite(y)) displayState.rotY = clampRot(y);
-  if (Number.isFinite(z)) displayState.rotZ = clampRot(z);
+  if (Number.isFinite(x)) displayState.rotX = normalizeRotRad(x);
+  if (Number.isFinite(y)) displayState.rotY = normalizeRotRad(y);
+  if (Number.isFinite(z)) displayState.rotZ = normalizeRotRad(z);
   broadcastState();
 }
 

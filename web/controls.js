@@ -15,11 +15,15 @@ const uploadStatusEl = document.getElementById("uploadStatus");
 const displayPreviewIframe = document.getElementById("displayPreview");
 const reloadPreviewBtn = document.getElementById("reloadPreview");
 const zoomValueEl = document.getElementById("zoomValue");
-const rotationValueEl = document.getElementById("rotationValue");
+const rotSliderX = document.getElementById("rotSliderX");
+const rotSliderY = document.getElementById("rotSliderY");
+const rotSliderZ = document.getElementById("rotSliderZ");
+const rotDegXEl = document.getElementById("rotDegX");
+const rotDegYEl = document.getElementById("rotDegY");
+const rotDegZEl = document.getElementById("rotDegZ");
 
 const PAN_STEP = 0.08;
 const ZOOM_STEP = 0.25;
-const ROT_STEP = 0.08;
 
 const displayPageUrl = `${window.location.origin}/display`;
 displayUrlEl.textContent = displayPageUrl;
@@ -35,19 +39,56 @@ function syncZoomLabel(data) {
   }
 }
 
-function syncRotationLabel(data) {
-  if (!rotationValueEl || !data) return;
+function degFromRad(r) {
+  return Math.round((r * 180) / Math.PI);
+}
+
+function clampDeg(d) {
+  return Math.max(-180, Math.min(180, d));
+}
+
+function syncRotationSlidersFromState(data) {
+  if (!data) return;
   const rx = data.rotX;
   const ry = data.rotY;
   const rz = data.rotZ;
   if (![rx, ry, rz].every((v) => typeof v === "number" && Number.isFinite(v))) return;
-  const deg = (r) => Math.round((r * 180) / Math.PI);
-  rotationValueEl.textContent = `Rot (°): P ${deg(rx)}  Y ${deg(ry)}  R ${deg(rz)}`;
+  const dx = clampDeg(degFromRad(rx));
+  const dy = clampDeg(degFromRad(ry));
+  const dz = clampDeg(degFromRad(rz));
+  if (rotSliderX && document.activeElement !== rotSliderX) rotSliderX.value = String(dx);
+  if (rotSliderY && document.activeElement !== rotSliderY) rotSliderY.value = String(dy);
+  if (rotSliderZ && document.activeElement !== rotSliderZ) rotSliderZ.value = String(dz);
+  updateRotationDegLabelsOnly();
+}
+
+function updateRotationDegLabelsOnly() {
+  if (rotSliderX && rotDegXEl) rotDegXEl.textContent = `${rotSliderX.value}°`;
+  if (rotSliderY && rotDegYEl) rotDegYEl.textContent = `${rotSliderY.value}°`;
+  if (rotSliderZ && rotDegZEl) rotDegZEl.textContent = `${rotSliderZ.value}°`;
+}
+
+function rotSlidersToSetPayload() {
+  const rx = (Number(rotSliderX.value) * Math.PI) / 180;
+  const ry = (Number(rotSliderY.value) * Math.PI) / 180;
+  const rz = (Number(rotSliderZ.value) * Math.PI) / 180;
+  return { mode: "set", rx, ry, rz };
+}
+
+let rotSendTimer = null;
+function scheduleRotationSendFromSliders() {
+  if (rotSendTimer != null) clearTimeout(rotSendTimer);
+  rotSendTimer = setTimeout(() => {
+    rotSendTimer = null;
+    postRotate(rotSlidersToSetPayload()).catch((e) => {
+      uploadStatusEl.textContent = e.message;
+    });
+  }, 45);
 }
 
 function syncViewLabels(data) {
   syncZoomLabel(data);
-  syncRotationLabel(data);
+  syncRotationSlidersFromState(data);
 }
 
 reloadPreviewBtn.addEventListener("click", () => {
@@ -110,29 +151,28 @@ async function postRotate(body) {
   return data;
 }
 
-function bindRotateClick(id, body) {
-  document.getElementById(id).addEventListener("click", async () => {
+function wireRotationSliders() {
+  const onInput = () => {
+    updateRotationDegLabelsOnly();
+    scheduleRotationSendFromSliders();
+  };
+  for (const el of [rotSliderX, rotSliderY, rotSliderZ]) {
+    if (el) el.addEventListener("input", onInput);
+  }
+  document.getElementById("rotReset").addEventListener("click", async () => {
     try {
-      await postRotate(body);
+      await postRotate({ reset: true });
+      if (rotSliderX) rotSliderX.value = "0";
+      if (rotSliderY) rotSliderY.value = "0";
+      if (rotSliderZ) rotSliderZ.value = "0";
+      updateRotationDegLabelsOnly();
     } catch (e) {
       uploadStatusEl.textContent = e.message;
     }
   });
 }
 
-bindRotateClick("rotPitchDown", { drx: -ROT_STEP });
-bindRotateClick("rotPitchUp", { drx: ROT_STEP });
-bindRotateClick("rotYawLeft", { dry: -ROT_STEP });
-bindRotateClick("rotYawRight", { dry: ROT_STEP });
-bindRotateClick("rotRollLeft", { drz: -ROT_STEP });
-bindRotateClick("rotRollRight", { drz: ROT_STEP });
-document.getElementById("rotReset").addEventListener("click", async () => {
-  try {
-    await postRotate({ reset: true });
-  } catch (e) {
-    uploadStatusEl.textContent = e.message;
-  }
-});
+wireRotationSliders();
 
 document.getElementById("panUp").addEventListener("click", async () => {
   try {

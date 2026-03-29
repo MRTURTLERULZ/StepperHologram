@@ -162,17 +162,34 @@
         opacity: 0.95;
         min-width: 7rem;
       }
-      .axis-label {
-        font-size: 0.78rem;
-        opacity: 0.88;
-        min-width: 4.75rem;
-        flex-shrink: 0;
-      }
       .rot-grid {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
         margin-top: 10px;
+      }
+      .rot-slider-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .rot-slider-row label {
+        min-width: 5.75rem;
+        margin-bottom: 0;
+        font-size: 0.88rem;
+      }
+      .rot-slider-row input[type="range"] {
+        flex: 1;
+        min-width: 120px;
+        accent-color: var(--accent);
+      }
+      .rot-slider-row .rot-deg {
+        min-width: 2.85rem;
+        text-align: right;
+        font-size: 0.85rem;
+        opacity: 0.92;
+        font-variant-numeric: tabular-nums;
       }
     </style>
   </head>
@@ -236,28 +253,26 @@
           <span id="zoomValue">Zoom: —</span>
         </div>
         <p class="hint" style="margin: 12px 0 0; font-size: 0.82rem">
-          Rotation is applied to the model (inside the motor spin). Pitch = tilt around X, yaw = extra twist around Y,
-          roll = around Z.
+          Rotation is applied to the model (inside the motor spin). Each slider is a full ±180° (pitch X, yaw Y, roll Z).
         </p>
         <div class="rot-grid">
-          <div class="zoom-row">
-            <span class="axis-label">Pitch (tilt)</span>
-            <button type="button" id="rotPitchDown" title="Tilt down (pitch −)">Pitch −</button>
-            <button type="button" id="rotPitchUp" title="Tilt up (pitch +)">Pitch +</button>
+          <div class="rot-slider-row">
+            <label for="rotSliderX">Pitch (X)</label>
+            <input id="rotSliderX" type="range" min="-180" max="180" step="1" value="0" />
+            <span id="rotDegX" class="rot-deg">0°</span>
           </div>
-          <div class="zoom-row">
-            <span class="axis-label">Yaw (twist)</span>
-            <button type="button" id="rotYawLeft" title="Yaw left">Yaw −</button>
-            <button type="button" id="rotYawRight" title="Yaw right">Yaw +</button>
+          <div class="rot-slider-row">
+            <label for="rotSliderY">Yaw (Y)</label>
+            <input id="rotSliderY" type="range" min="-180" max="180" step="1" value="0" />
+            <span id="rotDegY" class="rot-deg">0°</span>
           </div>
-          <div class="zoom-row">
-            <span class="axis-label">Roll</span>
-            <button type="button" id="rotRollLeft" title="Roll counterclockwise">Roll −</button>
-            <button type="button" id="rotRollRight" title="Roll clockwise">Roll +</button>
+          <div class="rot-slider-row">
+            <label for="rotSliderZ">Roll (Z)</label>
+            <input id="rotSliderZ" type="range" min="-180" max="180" step="1" value="0" />
+            <span id="rotDegZ" class="rot-deg">0°</span>
+          </div>
+          <div class="buttons" style="margin-top: 6px">
             <button type="button" id="rotReset">Reset rotation</button>
-          </div>
-          <div class="zoom-row">
-            <span id="rotationValue" style="font-size: 0.9rem; opacity: 0.95">Rot (°): —</span>
           </div>
         </div>
       </section>

@@ -36,11 +36,24 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, isEmbedPreview ? 2 : 3));
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.NoToneMapping;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c1520);
+
+scene.add(new THREE.AmbientLight(0x607090, 0.38));
+scene.add(new THREE.HemisphereLight(0xa0b8d8, 0x1a2430, 0.62));
+const keyLight = new THREE.DirectionalLight(0xfff5e8, 1.12);
+keyLight.position.set(2.8, 5.2, 4);
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0xc8dcff, 0.4);
+fillLight.position.set(-4.2, 1.8, -1.2);
+scene.add(fillLight);
+const rimLight = new THREE.DirectionalLight(0x7ec8ff, 0.36);
+rimLight.position.set(0.4, -2.8, -4.2);
+scene.add(rimLight);
 
 const camera = new THREE.PerspectiveCamera(
   50,
@@ -80,8 +93,10 @@ const PLANE_SIZE = 2.4;
 const TARGET_MODEL_SIZE = 2.35;
 const PAN_POSITION_SCALE = 0.55;
 
-const placeholderMaterial = new THREE.MeshBasicMaterial({
-  color: 0x3cc0ff,
+const placeholderMaterial = new THREE.MeshStandardMaterial({
+  color: 0x4a9cc8,
+  metalness: 0.06,
+  roughness: 0.82,
   side: THREE.DoubleSide,
 });
 const placeholderMesh = new THREE.Mesh(
@@ -275,13 +290,16 @@ function loadStlFromUrl(url) {
     })
     .then((buffer) => {
       const geometry = parseStlArrayBuffer(buffer);
+      geometry.computeVertexNormals();
       geometry.computeBoundingBox();
       const bb = geometry.boundingBox;
       if (!bb || bb.isEmpty()) {
         throw new Error("STL has empty bounds");
       }
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0x7fd8ff,
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xb8d4e8,
+        metalness: 0.1,
+        roughness: 0.48,
         side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(geometry, mat);
