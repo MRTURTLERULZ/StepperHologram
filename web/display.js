@@ -118,6 +118,70 @@ const texLoader = new THREE.TextureLoader();
 const gltfLoader = new GLTFLoader();
 const stlLoader = new STLLoader();
 
+const hintEl = document.getElementById("display-hint");
+
+function setLoadHint(text) {
+  if (hintEl) hintEl.textContent = text || "";
+}
+
+/** Binary STL: 80-byte header + uint32 triangle count + 50 bytes per triangle */
+function isLikelyBinaryStl(buffer) {
+  const len = buffer.byteLength;
+  if (len < 84) return false;
+  const view = new DataView(buffer);
+  const nTri = view.getUint32(80, true);
+  if (!Number.isFinite(nTri) || nTri < 1 || nTri > 20_000_000) return false;
+  const need = 84 + nTri * 50;
+  return need <= len;
+}
+
+function parseBinaryStlGeometry(buffer) {
+  const ab = buffer instanceof ArrayBuffer ? buffer : buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  const view = new DataView(ab);
+  const len = ab.byteLength;
+  if (len < 84) return null;
+  const nTri = view.getUint32(80, true);
+  const need = 84 + nTri * 50;
+  if (nTri < 1 || need > len) return null;
+  const positions = new Float32Array(nTri * 9);
+  let pi = 0;
+  let off = 84;
+  for (let i = 0; i < nTri; i++) {
+    off += 12;
+    for (let j = 0; j < 3; j++) {
+      positions[pi++] = view.getFloat32(off, true);
+      off += 4;
+      positions[pi++] = view.getFloat32(off, true);
+      off += 4;
+      positions[pi++] = view.getFloat32(off, true);
+      off += 4;
+    }
+    off += 2;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  return geo;
+}
+
+function parseStlArrayBuffer(buffer) {
+  if (isLikelyBinaryStl(buffer)) {
+    const g = parseBinaryStlGeometry(buffer);
+    const pos = g?.getAttribute("position");
+    if (pos && pos.count > 0) return g;
+  }
+  try {
+    const g = stlLoader.parse(buffer);
+    const pos = g.getAttribute("position");
+    if (pos && pos.count > 0) return g;
+  } catch {
+    /* continue */
+  }
+  const g2 = parseBinaryStlGeometry(buffer);
+  const pos2 = g2?.getAttribute("position");
+  if (g2 && pos2 && pos2.count > 0) return g2;
+  throw new Error("STL parse failed");
+}
+
 function disposeObjectTree(root) {
   root.traverse((obj) => {
     if (obj.geometry) {
@@ -281,33 +345,25 @@ function loadModelFromUrl(url) {
   };
 
   if (pathname.endsWith(".stl")) {
+    setLoadHint("Loading STL…");
     fetch(absUrl, { cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.arrayBuffer();
       })
       .then((buffer) => {
-        let geometry;
-        try {
-          geometry = stlLoader.parse(buffer);
-        } catch {
-          throw new Error("STL parse failed");
-        }
-        const pos = geometry.getAttribute("position");
-        if (!pos || pos.count === 0) {
-          throw new Error("STL has no vertices");
-        }
-        geometry.rotateX(-Math.PI / 2);
+        const geometry = parseStlArrayBuffer(buffer);
         geometry.computeBoundingBox();
-        geometry.computeVertexNormals();
-        const mat = new THREE.MeshPhongMaterial({
-          color: 0xd8e6f2,
-          emissive: 0x2a3844,
-          specular: 0x8899aa,
-          shininess: 48,
+        const bb = geometry.boundingBox;
+        if (!bb || bb.isEmpty()) {
+          throw new Error("STL has empty bounds");
+        }
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0x7fd8ff,
           side: THREE.DoubleSide,
         });
         const mesh = new THREE.Mesh(geometry, mat);
+        mesh.rotation.x = -Math.PI / 2;
         const fitted = wrapFittedModel(mesh);
         useModel = true;
         loadedModelUrl = absUrl;
@@ -317,8 +373,12 @@ function loadModelFromUrl(url) {
         spinGroup.rotation.y = 0;
         contentHolder.add(fitted);
         imageMesh.rotation.set(0, 0, 0);
+        setLoadHint("");
       })
-      .catch(() => onFail());
+      .catch((err) => {
+        setLoadHint(`STL error: ${err && err.message ? err.message : "load failed"} — open /uploads/display-model.stl in the browser`);
+        onFail();
+      });
     return;
   }
 
@@ -349,13 +409,18 @@ function loadModelFromUrl(url) {
         spinGroup.rotation.y = 0;
         contentHolder.add(fitted);
         imageMesh.rotation.set(0, 0, 0);
+        setLoadHint("");
       },
       undefined,
-      onFail
+      () => {
+        setLoadHint("GLB/GLTF load failed");
+        onFail();
+      }
     );
     return;
   }
 
+  setLoadHint("Unknown model type (use .stl or .glb)");
   onFail();
 }
 
@@ -379,8 +444,10 @@ function applyDisplayState(state) {
     loadedModelUrl = "";
     useModel = false;
     if (imageRef) {
+      setLoadHint("");
       loadImageFromUrl(imageRef);
     } else {
+      setLoadHint("");
       setFallbackImagePlane();
     }
   }
