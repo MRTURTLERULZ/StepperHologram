@@ -1,5 +1,13 @@
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js";
-import { STLLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/STLLoader.js";
+import * as THREE from "three";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
+
+window.addEventListener("error", (ev) => {
+  setLoadHint(`Script error: ${ev.message || "see console"}`);
+});
+
+window.addEventListener("unhandledrejection", (ev) => {
+  setLoadHint(`Load error: ${ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason)}`);
+});
 
 const urlParams = new URLSearchParams(window.location.search);
 const isEmbedPreview = urlParams.get("embed") === "1";
@@ -252,6 +260,10 @@ function loadStlFromUrl(url) {
   fetch(absUrl, { cache: "no-store" })
     .then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("text/html")) {
+        throw new Error("STL URL returned HTML (wrong path or 404)");
+      }
       return res.arrayBuffer();
     })
     .then((buffer) => {
@@ -337,6 +349,12 @@ function startDisplayStatePolling() {
 function connectWebSocket() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+  ws.addEventListener("open", () => {
+    fetchDisplayStateJson()
+      .then((s) => applyDisplayState(s))
+      .catch(() => {});
+  });
 
   ws.addEventListener("message", (ev) => {
     let msg;

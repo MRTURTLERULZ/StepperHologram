@@ -455,6 +455,28 @@ app.get("/controls", (_req, res) => {
   res.sendFile(path.join(webDir, "controls.html"));
 });
 
+const threeRoot = path.join(projectRoot, "node_modules", "three");
+if (fs.existsSync(path.join(threeRoot, "build"))) {
+  app.use("/vendor/three/build", express.static(path.join(threeRoot, "build")));
+  app.use("/vendor/three/examples/jsm", express.static(path.join(threeRoot, "examples", "jsm")));
+  logDbg("Serving Three.js from", threeRoot);
+} else {
+  logDbg("WARNING: run npm install — node_modules/three missing (display will fail to load)");
+}
+
+app.get("/uploads/display-model.stl", (req, res) => {
+  const fp = path.join(uploadsDir, "display-model.stl");
+  const exists = fs.existsSync(fp);
+  const size = exists ? fs.statSync(fp).size : 0;
+  logDbg("GET /uploads/display-model.stl", { v: req.query.v, exists, size, ip: req.ip });
+  if (!exists) {
+    return res.status(404).type("text/plain").send("STL not found on disk");
+  }
+  res.set("Cache-Control", "no-store, must-revalidate");
+  res.type("application/octet-stream");
+  res.sendFile(fp);
+});
+
 app.use(express.static(webDir));
 
 app.get("/*splat", (req, res) => {
