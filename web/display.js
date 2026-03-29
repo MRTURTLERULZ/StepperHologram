@@ -101,9 +101,6 @@ const PAN_POSITION_SCALE = 0.55;
 /** Must match `stepper.c`: STEPS_PER_REV and f_start for ramp math. */
 const MOTOR_STEPS_PER_REV = 200;
 const MOTOR_F_START_HZ = 1.0;
-/** Visual spin is opposite to the motor’s signed speed direction. */
-const DISPLAY_SPIN_SIGN = -1;
-
 /**
  * Instantaneous angular velocity (rad/s) matching the stepper trapezoid in stepper.c:
  * pulse frequency ramps linearly from f_start to f_max over ramp_sec, flat, then down.
@@ -148,12 +145,15 @@ function motorTrapezoidOmegaRadPerSec(mv, tSec) {
   return 0;
 }
 
+let spinSignFromState = -1;
+
 function displaySpinOmegaRadPerSec(mv) {
   if (!mv || !mv.running) return 0;
   const startedMs = mv.startedAt ? Date.parse(mv.startedAt) : NaN;
   if (!Number.isFinite(startedMs)) return 0;
   const tSec = (Date.now() - startedMs) / 1000;
-  return DISPLAY_SPIN_SIGN * motorTrapezoidOmegaRadPerSec(mv, tSec);
+  const sign = spinSignFromState === 1 ? 1 : -1;
+  return sign * motorTrapezoidOmegaRadPerSec(mv, tSec);
 }
 
 let motorVisualForSpin = {
@@ -401,6 +401,9 @@ function applyDisplayState(state) {
   if (typeof state.rotZ === "number" && Number.isFinite(state.rotZ)) rotZ = state.rotZ;
   if (typeof state.zoom === "number" && Number.isFinite(state.zoom)) {
     zoomLevel = clampClientZoom(state.zoom);
+  }
+  if (typeof state.spinSign === "number" && (state.spinSign === 1 || state.spinSign === -1)) {
+    spinSignFromState = state.spinSign;
   }
   applyPanToSubject();
   applyRotationToSubject();

@@ -64,6 +64,8 @@ let displayState = {
   rotY: 0,
   rotZ: 0,
   zoom: ZOOM_DEFAULT,
+  /** 1 = same direction as motor speed sign; -1 = inverted (default). */
+  spinSign: -1,
   modelUrl: "",
   motorVisual: {
     running: false,
@@ -107,6 +109,7 @@ function buildStateMessage() {
     rotY: displayState.rotY,
     rotZ: displayState.rotZ,
     zoom: displayState.zoom,
+    spinSign: displayState.spinSign,
     modelUrl: displayState.modelUrl,
     motorVisual: { ...displayState.motorVisual },
   };
@@ -174,6 +177,16 @@ function resetRot() {
   displayState.rotX = 0;
   displayState.rotY = 0;
   displayState.rotZ = 0;
+  broadcastState();
+}
+
+function setSpinSign(sign) {
+  displayState.spinSign = sign === 1 ? 1 : -1;
+  broadcastState();
+}
+
+function toggleSpinSign() {
+  displayState.spinSign = displayState.spinSign === 1 ? -1 : 1;
   broadcastState();
 }
 
@@ -252,6 +265,12 @@ function handleWsMessage(raw) {
     case "resetRotate":
       resetRot();
       break;
+    case "toggleSpinSign":
+      toggleSpinSign();
+      break;
+    case "setSpinSign":
+      setSpinSign(msg.sign);
+      break;
     default:
       break;
   }
@@ -292,9 +311,24 @@ app.get("/api/display/state", (req, res) => {
     rotY: displayState.rotY,
     rotZ: displayState.rotZ,
     zoom: displayState.zoom,
+    spinSign: displayState.spinSign,
     modelUrl: displayState.modelUrl,
     motorVisual: displayState.motorVisual,
   });
+});
+
+app.post("/api/display/spin-direction", (req, res) => {
+  const body = req.body || {};
+  if (body.toggle === true) {
+    toggleSpinSign();
+    return res.json({ ok: true, ...buildStateMessage() });
+  }
+  const s = Number(body.sign);
+  if (s === 1 || s === -1) {
+    setSpinSign(s);
+    return res.json({ ok: true, ...buildStateMessage() });
+  }
+  return res.status(400).json({ error: "Send { toggle: true } or { sign: 1 | -1 }" });
 });
 
 app.post("/api/display/pan", (req, res) => {

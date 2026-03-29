@@ -21,6 +21,7 @@ const rotSliderZ = document.getElementById("rotSliderZ");
 const rotDegXEl = document.getElementById("rotDegX");
 const rotDegYEl = document.getElementById("rotDegY");
 const rotDegZEl = document.getElementById("rotDegZ");
+const spinDirLabel = document.getElementById("spinDirLabel");
 
 const PAN_STEP = 0.08;
 const ZOOM_STEP = 0.25;
@@ -86,8 +87,16 @@ function scheduleRotationSendFromSliders() {
   }, 45);
 }
 
+function syncSpinDirLabel(data) {
+  if (!spinDirLabel || !data || typeof data.spinSign !== "number") return;
+  const s = data.spinSign === 1 ? 1 : -1;
+  spinDirLabel.textContent =
+    s === 1 ? "Spin: same as motor" : "Spin: opposite to motor";
+}
+
 function syncViewLabels(data) {
   syncZoomLabel(data);
+  syncSpinDirLabel(data);
   syncRotationSlidersFromState(data);
 }
 
@@ -151,6 +160,18 @@ async function postRotate(body) {
   return data;
 }
 
+async function postSpinDirection(body) {
+  const res = await fetch("/api/display/spin-direction", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Spin direction failed: ${res.status}`);
+  syncViewLabels(data);
+  return data;
+}
+
 function wireRotationSliders() {
   const onInput = () => {
     updateRotationDegLabelsOnly();
@@ -173,6 +194,14 @@ function wireRotationSliders() {
 }
 
 wireRotationSliders();
+
+document.getElementById("toggleSpinDir").addEventListener("click", async () => {
+  try {
+    await postSpinDirection({ toggle: true });
+  } catch (e) {
+    uploadStatusEl.textContent = e.message;
+  }
+});
 
 document.getElementById("panUp").addEventListener("click", async () => {
   try {
