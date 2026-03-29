@@ -98,6 +98,73 @@ const PLANE_SIZE = 2.4;
 const TARGET_MODEL_SIZE = 2.35;
 const PAN_POSITION_SCALE = 0.55;
 
+/** Must match `stepper.c`: STEPS_PER_REV and f_start for ramp math. */
+const MOTOR_STEPS_PER_REV = 200;
+const MOTOR_F_START_HZ = 1.0;
+/** Visual spin is opposite to the motor’s signed speed direction. */
+const DISPLAY_SPIN_SIGN = -1;
+
+/**
+ * Instantaneous angular velocity (rad/s) matching the stepper trapezoid in stepper.c:
+ * pulse frequency ramps linearly from f_start to f_max over ramp_sec, flat, then down.
+ */
+function motorTrapezoidOmegaRadPerSec(mv, tSec) {
+  if (!mv || !mv.running) return 0;
+  const speedRevPerSec = Number(mv.speed);
+  const duration = Number(mv.duration);
+  const rampIn = Number(mv.ramp);
+  const microsteps = Number.isFinite(Number(mv.microsteps)) ? Math.max(1, Math.floor(Number(mv.microsteps))) : 16;
+  if (!Number.isFinite(speedRevPerSec) || speedRevPerSec === 0) return 0;
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  if (!Number.isFinite(tSec) || tSec < 0) return 0;
+  if (tSec >= duration) return 0;
+
+  const sign = Math.sign(speedRevPerSec);
+  const speedMag = Math.abs(speedRevPerSec);
+  const pulsesPerRev = MOTOR_STEPS_PER_REV * microsteps;
+  const fMax = speedMag * pulsesPerRev;
+  const omegaFromF = (fHz) => sign * (fHz / pulsesPerRev) * (Math.PI * 2);
+
+  let rampSec = Math.max(0, rampIn);
+  if (2 * rampSec > duration) rampSec = duration / 2;
+  const flatSec = Math.max(0, duration - 2 * rampSec);
+
+  if (rampSec <= 0 || fMax <= MOTOR_F_START_HZ) {
+    return omegaFromF(fMax);
+  }
+
+  if (tSec < rampSec) {
+    const f = MOTOR_F_START_HZ + ((fMax - MOTOR_F_START_HZ) * tSec) / rampSec;
+    return omegaFromF(f);
+  }
+  if (tSec < rampSec + flatSec) {
+    return omegaFromF(fMax);
+  }
+  const td = tSec - rampSec - flatSec;
+  if (td < rampSec) {
+    const f = fMax - ((fMax - MOTOR_F_START_HZ) * td) / rampSec;
+    return omegaFromF(f);
+  }
+  return 0;
+}
+
+function displaySpinOmegaRadPerSec(mv) {
+  if (!mv || !mv.running) return 0;
+  const startedMs = mv.startedAt ? Date.parse(mv.startedAt) : NaN;
+  if (!Number.isFinite(startedMs)) return 0;
+  const tSec = (Date.now() - startedMs) / 1000;
+  return DISPLAY_SPIN_SIGN * motorTrapezoidOmegaRadPerSec(mv, tSec);
+}
+
+let motorVisualForSpin = {
+  running: false,
+  speed: 0,
+  duration: 0,
+  ramp: 0,
+  microsteps: 16,
+  startedAt: null,
+};
+
 const placeholderMaterial = new THREE.MeshLambertMaterial({
   color: 0x5cb0e8,
   side: THREE.DoubleSide,
@@ -349,19 +416,20 @@ function applyDisplayState(state) {
     setPlaceholderPlane();
   }
 
-  desiredSpinRate = recomputeDesiredSpinRate(state.motorVisual);
+  if (state.motorVisual && typeof state.motorVisual === "object") {
+    const mv = state.motorVisual;
+    motorVisualForSpin = {
+      running: !!mv.running,
+      speed: Number(mv.speed),
+      duration: Number(mv.duration),
+      ramp: Number(mv.ramp),
+      microsteps: Number.isFinite(Number(mv.microsteps)) ? Number(mv.microsteps) : 16,
+      startedAt: mv.startedAt != null ? String(mv.startedAt) : null,
+    };
+  }
 }
 
-let spinRateRadPerSec = 0;
-let desiredSpinRate = 0;
 let lastFrame = performance.now();
-
-function recomputeDesiredSpinRate(motorVisual) {
-  if (!motorVisual || !motorVisual.running) return 0;
-  const speed = Number(motorVisual.speed);
-  if (!Number.isFinite(speed)) return 0;
-  return speed * Math.PI * 2;
-}
 
 function fetchDisplayStateJson() {
   return fetch(`/api/display/state?_=${Date.now()}`, { cache: "no-store" }).then((r) => {
@@ -428,14 +496,13 @@ function animate(now) {
   const dt = (now - lastFrame) / 1000;
   lastFrame = now;
 
-  const blend = Math.min(1, dt * 22);
-  spinRateRadPerSec += (desiredSpinRate - spinRateRadPerSec) * blend;
+  const omega = displaySpinOmegaRadPerSec(motorVisualForSpin);
 
   if (useModel) {
-    spinGroup.rotation.y += spinRateRadPerSec * dt;
+    spinGroup.rotation.y += omega * dt;
   } else {
     spinGroup.rotation.y = 0;
-    placeholderMesh.rotation.z += spinRateRadPerSec * dt;
+    placeholderMesh.rotation.z += omega * dt;
   }
 
   renderer.render(scene, camera);
